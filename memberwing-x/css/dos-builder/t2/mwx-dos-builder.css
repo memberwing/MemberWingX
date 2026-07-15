@@ -1,0 +1,30 @@
+#content .mwx-dos-product-t2 tbody tr td, .mwx-dos-product-t2 tbody tr td {
+   padding: 0;
+   vertical-align: middle;
+   border:none;
+   }
+
+#content .mwx-dos-product-t2, .mwx-dos-product-t2 {
+   margin: 0;
+}
+
+#text_tooltip_t2 {
+   position:absolute;
+   border:2px solid #333;
+   background:#FFC;
+   padding:2px 5px;
+   color:#333;
+   width:300px;
+   display:none;
+   z-index:100;
+   }
+
+#image_tooltip_t2 {
+   position:absolute;
+   border:2px solid #333;
+   background:#FFC;
+   padding:2px 5px;
+   color:#333;
+   display:none;
+   z-index:100;
+   }

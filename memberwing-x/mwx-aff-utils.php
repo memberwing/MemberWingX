@@ -39,6 +39,14 @@ function MWX__GetCurrentAffiliateRawID ()
    global $g_MWX__current_affiliate_id;
    return $g_MWX__current_affiliate_id;
 }
+
+function MWX__GetCurrentAffiliateUsername ($affid)
+{
+   if (!is_numeric($affid))
+      return "";
+   $user_info = get_userdata ($affid);
+   return (@$user_info->user_login);
+}
 //===========================================================================
 
 //===========================================================================
@@ -66,7 +74,7 @@ function MWX__GetAffiliateInfoByRawID ($aff_raw_id)
    if (strpos ($aff_raw_id, '@'))
       {
       $aff_email = $aff_raw_id;
-      $aff_id    = email_exists ($aff_email);
+      $aff_id    = MWX__email_exists ($aff_email);
       // ID maybe false here if affiliate is not yet a member of blog
       }
    else
@@ -93,7 +101,7 @@ function MWX__GetAffiliateInfoByRawID ($aff_raw_id)
    $aff_info['aff_password']  = "";             // For compatibility with MWX__CreateAffiliate...
    if ($aff_id)
       {
-      $aff_info['mwx_aff_info']  = maybe_unserialize(get_usermeta ($aff_id, 'mwx_aff_info'));
+      $aff_info['mwx_aff_info']  = MWX__get_usermeta_array ($aff_id, 'mwx_aff_info');
       if (!is_array($aff_info['mwx_aff_info']) || !count($aff_info['mwx_aff_info']))
          $aff_info['mwx_aff_info']  = FALSE;
       }
@@ -211,12 +219,40 @@ function MWX__CalculateAffiliatePayoutForSale ($affiliate_raw_id, $total_sale_am
       // More tiers are possible - but their payout percentage will be the same as third tier
       $pcts = $mwx_settings['aff_payout_percents3'];
 
-   $payout_for_this_sale = $total_sale_amt * $pcts / 100;
+   $payout_for_this_sale = (float)$total_sale_amt * (float)$pcts / 100;
 
    // "1.2345" -> "1.23"
    $payout_for_this_sale = round ($payout_for_this_sale, 2);
 
    return ($payout_for_this_sale);
+}
+//===========================================================================
+
+//===========================================================================
+function MWX__Generate_Default_Affiliate_Metadata ($is_sandbox, $mwx_settings)
+{
+   // Create new default metadata for new affiliate
+   $aff_meta = array (
+      'aff_status'=>$mwx_settings['aff_auto_approve_affiliates']?'active':'pending', // active, pending, declined, banned.
+      'immune_to_min_payout_limit'=>'0',
+      'payout_percents'=>'0',    // 0=> use system default
+      'payout_adjustment'=>'0',  // Outstanding bonus (+) or outstanding payment adjustment (-)  (product refund for already paid commission)
+      'sandbox_account'=>$is_sandbox,
+      'payouts'   => array(),          // array( array('date'=>'', 'payout_txn_id'=>'', 'payout_amt'=>'', 'payout_adjustment_included'=>''), array(...))
+      'referrals' => array(),
+         // array (  Each referral sale recorded here:
+         //    'txn_date'        => $_inputs['U_txn_date'],
+         //    'txn_id'          => $_inputs['txn_id'],
+         //    'full_sale_amt'   => $_inputs['mc_amount3_gross'],
+         //    'payout_amt'      => MWX__CalculateAffiliatePayoutForSale(...),
+         //    'affiliate_tier'  => $tier+1,    // 1-main affiliate, 2...5
+         //    'referral_for_id' => $user_id,
+         //    'status'          => $aff_txn_status,        // 'approved', 'declined', 'refunded', 'reversed', 'pending', 'adjusted'
+         //    'paid'            => $_inputs['aff_paid'],   // Instantly paid? If Adaptive payment => was instantly paid, else:not.
+         //    );
+      );
+
+   return ($aff_meta);
 }
 //===========================================================================
 
@@ -242,25 +278,7 @@ function MWX__CreateNewAffiliate ($email, $desired_username, $desired_password, 
    $new_aff_info = array();
 
    // Create new default metadata for new affiliate
-   $aff_meta = array (
-      'aff_status'=>$mwx_settings['aff_auto_approve_affiliates']?'active':'pending', // active, pending, declined, banned.
-      'immune_to_min_payout_limit'=>'0',
-      'payout_percents'=>'0',    // 0=> use system default
-      'payout_adjustment'=>'0',  // Outstanding bonus (+) or outstanding payment adjustment (-)  (product refund for already paid commission)
-      'sandbox_account'=>$sandbox_account,
-      'payouts'   => array(),          // array( array('date'=>'', 'payout_txn_id'=>'', 'payout_amt'=>'', 'payout_adjustment_included'=>''), array(...))
-      'referrals' => array(),
-         // array (  Each referral sale recorded here:
-         //    'txn_date'        => $_inputs['U_txn_date'],
-         //    'txn_id'          => $_inputs['txn_id'],
-         //    'full_sale_amt'   => $_inputs['mc_amount3_gross'],
-         //    'payout_amt'      => MWX__CalculateAffiliatePayoutForSale(...),
-         //    'affiliate_tier'  => $tier+1,    // 1-main affiliate, 2...5
-         //    'referral_for_id' => $user_id,
-         //    'status'          => $aff_txn_status,        // 'approved', 'declined', 'refunded', 'reversed', 'pending', 'adjusted'
-         //    'paid'            => $_inputs['aff_paid'],   // Instantly paid? If Adaptive payment => was instantly paid, else:not.
-         //    );
-      );
+   $aff_meta = MWX__Generate_Default_Affiliate_Metadata ($sandbox_account, $mwx_settings);
 
    //    array ('aff_id'=>123, 'aff_email'=>'john@smith.com', 'aff_username'=>"...", 'aff_password'=>"...", 'mwx_aff_info'=>"...") - only 'aff_email' is guaranteed to be initialized.
    $aff_info = MWX__GetAffiliateInfoByRawID ($email);
@@ -285,7 +303,7 @@ function MWX__CreateNewAffiliate ($email, $desired_username, $desired_password, 
          $new_aff_info['mwx_aff_info']  = $aff_meta;
 
          // Update info for this affiliate
-         update_usermeta ($new_aff_info['aff_id'], 'mwx_aff_info', serialize ($aff_meta));
+         update_user_meta ($new_aff_info['aff_id'], 'mwx_aff_info', serialize ($aff_meta));
          MWX__log_event (__FILE__, __LINE__, "Note: Added affiliate metadata record for already existing user: $email.");
          }
       }
@@ -306,14 +324,14 @@ function MWX__CreateNewAffiliate ($email, $desired_username, $desired_password, 
       else
          $actual_password = $desired_password;
 
-      $new_aff_info['aff_id']        = wp_create_user ($actual_username, $actual_password, $email);
+      $new_aff_info['aff_id']        = MWX__wp_create_user ($actual_username, $actual_password, $email);
       $new_aff_info['aff_username']  = $actual_username;
       $new_aff_info['aff_password']  = $actual_password;
       $new_aff_info['aff_email']     = $email;
       $new_aff_info['mwx_aff_info']  = $aff_meta;
 
       // Update info for this affiliate
-      update_usermeta ($new_aff_info['aff_id'], 'mwx_aff_info', serialize ($aff_meta));
+      update_user_meta ($new_aff_info['aff_id'], 'mwx_aff_info', serialize ($aff_meta));
 
       MWX__log_event (__FILE__, __LINE__, "Note: Added brand new user-affiliate: $email. L/P: $actual_username/$actual_password.");
       }
@@ -370,7 +388,7 @@ function MWX__CalculateDuePayoutForAffiliate ($mwx_settings, $aff_raw_id)
    $aff_info_updated = FALSE;
 
    // Iterate through affiliate's referrals...
-   if (isset($aff_info['referrals']) && count($aff_info['referrals']))
+   if (isset($aff_info['referrals']) && is_array($aff_info['referrals']) && count($aff_info['referrals']))
       {
       foreach ($aff_info['referrals'] as $ref_idx=>$referral)
          {
@@ -414,17 +432,17 @@ function MWX__CalculateDuePayoutForAffiliate ($mwx_settings, $aff_raw_id)
 
    if ($aff_info_updated)
       {
-      update_usermeta ($aff_raw_id, 'mwx_aff_info', serialize ($aff_info));
+      update_user_meta ($aff_raw_id, 'mwx_aff_info', serialize ($aff_info));
       }
 
    // Take outstanding debits/credits into consideration
-   $return_data['due_payout_amt'] += $aff_info['payout_adjustment'];
+   $return_data['due_payout_amt'] += (float)@$aff_info['payout_adjustment'];
 
    // Subtract all previous successful 'payouts' from the final number.
-   foreach ($aff_info['payouts'] as $payout)
+   foreach ((array)@$aff_info['payouts'] as $payout)
       {
-      $return_data['due_payout_amt'] -= $payout['payout_amt'];
-      $return_data['due_payout_amt'] += @$payout['payout_adjustment_included'];  // Correction on amount of payout adjustemnt that was absorbed/covered by that payout. (Payout adjustment is not part of referrals but it need to be considered)
+      $return_data['due_payout_amt'] -= (float)@$payout['payout_amt'];
+      $return_data['due_payout_amt'] += (float)@$payout['payout_adjustment_included'];  // Correction on amount of payout adjustemnt that was absorbed/covered by that payout. (Payout adjustment is not part of referrals but it need to be considered)
       }
 
    if ($return_data['due_payout_amt'] <= 0)
@@ -433,7 +451,7 @@ function MWX__CalculateDuePayoutForAffiliate ($mwx_settings, $aff_raw_id)
       }
 
    // Affiliate's due payout is above zero here...
-   if ($aff_info['immune_to_min_payout_limit'] || $return_data['due_payout_amt'] > $mwx_settings['aff_min_payout_threshold'])
+   if (@$aff_info['immune_to_min_payout_limit'] || (float)$return_data['due_payout_amt'] > (float)@$mwx_settings['aff_min_payout_threshold'])
       {
       return $return_data; // Affiliate is immune to sitewide minimal payout thresholds or reached above threshold value.
       }
@@ -491,7 +509,7 @@ function MWX__Manual_Affiliate_Payout ()
       }
 
    // Update info for this affiliate
-   update_usermeta ($_inputs['custom']['aff_id'], 'mwx_aff_info', serialize ($aff_info));
+   update_user_meta ($_inputs['custom']['aff_id'], 'mwx_aff_info', serialize ($aff_info));
 
    MWX__log_event (__FILE__, __LINE__, "Note: Processed manual payment of \${$_inputs['custom']['aff_payout']} for affiliate: $aff_username ($aff_email).");
 }

@@ -1,0 +1,6 @@
+Options -Indexes
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  RewriteRule .* - [F,NS,L]
+</IfModule>

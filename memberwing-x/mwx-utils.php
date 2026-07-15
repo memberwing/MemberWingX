@@ -234,15 +234,25 @@ function MWX__UnwrapAdaptiveResponse ($response)
 //===========================================================================
 
 //===========================================================================
+// Replacement for: if ($product['product_status'] == 'active')
+function MWX__is_product_active ($product_status)
+{
+   if ($product_status == 'active' || $product_status == 'active-ending')
+      return true;
+   return false;
+}
+//===========================================================================
+
+//===========================================================================
 function MWX__log_event ($filename, $linenum, $message, $extra_text="")
 {
    $log_filename   = dirname(__FILE__) . '/__log.php';
-   $logfile_header = '<?php header("Location: /"); exit(); ?>' . "\r\n" . '/* =============== MemberWing-X LOG file =============== */' . "\r\n";
+   $logfile_header = '<?php include_once (dirname(__FILE__) . "/mwx-include-all.php"); $mwx_settings = MWX__get_settings (); if ($mwx_settings["mwx_api_key"] != @$_POST["mwx_api_key"]) { header("Location: /"); exit();} ?>' . "\r\n" . '/* =============== MemberWing-X LOG file =============== */' . "\r\n";
    $logfile_tail   = "\r\nEND";
 
    // Delete too long logfiles.
-   if (@file_exists ($log_filename) && @filesize($log_filename)>1000000)
-      unlink ($log_filename);
+//   if (@file_exists ($log_filename) && MWX__filesize($log_filename)>1000000)
+//      unlink ($log_filename);
 
    $filename = basename ($filename);
 
@@ -262,7 +272,7 @@ function MWX__log_event ($filename, $linenum, $message, $extra_text="")
 
    if ($fhandle)
       {
-      @fwrite ($fhandle, "\r\n// " . $_SERVER['REMOTE_ADDR'] . '(' . $_SERVER['REMOTE_PORT'] . ')' . ' -> ' . date("Y-m-d, G:i:s") . "|$filename($linenum)|: " . $message . ($extra_text?"\r\n//    Extra Data: $extra_text":"") . $logfile_tail);
+      @fwrite ($fhandle, "\r\n// " . $_SERVER['REMOTE_ADDR'] . '(' . $_SERVER['REMOTE_PORT'] . ')' . ' -> ' . date("Y-m-d, G:i:s") . "|" . MEMBERWING_X_VERSION . "/" . MEMBERWING_X_EDITION . "|$filename($linenum)|: " . $message . ($extra_text?"\r\n//    Extra Data: $extra_text":"") . $logfile_tail);
       @fclose ($fhandle);
       }
 }
@@ -292,6 +302,13 @@ function MWX__send_email ($email_to, $email_from, $subject, $plain_body)
 {
 //DANIEL//
    $mwx_settings = MWX__get_settings ();
+   if ($mwx_settings['mwx_disable_all_emails'])
+      {
+      MWX__log_event (__FILE__, __LINE__, "NOTE: Skipping sending email - all outgoing emails are disabled via Integration settings");
+      return;
+      }
+
+   $email_from_with_name = '"'.$mwx_settings['welcome_email_from_name'] .'" <'.$email_from.'>';
 
    $use_smtp      = $mwx_settings['smtp_enabled']==1;
    $smtp_host     = $mwx_settings['smtp_host'];
@@ -327,7 +344,7 @@ function MWX__send_email ($email_to, $email_from, $subject, $plain_body)
       require_once ("Mail.php");
       require_once ("Mail/mime.php");
 
-      $headers["From"]    = $email_from;
+      $headers["From"]    = $email_from_with_name;
       $headers["To"]      = $email_to;
       $headers["Subject"] = $subject;
 
@@ -346,12 +363,12 @@ function MWX__send_email ($email_to, $email_from, $subject, $plain_body)
       $headers = $mime->headers($headers);
 
       // Create the mail object using the Mail::factory method
-      $mail_object =& Mail::factory("smtp", $params);
+      $mail_object = Mail::factory("smtp", $params);
       $bRetCode = $mail_object->send($email_to, $headers, $body);
       if ($bRetCode == true)
-         MWX__log_event (__FILE__, __LINE__, "Successfully sent SMTP email from: $email_from to: $email_to.");
+         MWX__log_event (__FILE__, __LINE__, "Successfully sent SMTP email from: $email_from_with_name to: $email_to.");
       else
-         MWX__log_event (__FILE__, __LINE__, "ERROR: SMTP mail send failed. Error sending email from: $email_from to: $email_to.");
+         MWX__log_event (__FILE__, __LINE__, "ERROR: SMTP mail send failed. Error sending email from: $email_from_with_name to: $email_to.");
       }
    else
       {
@@ -360,16 +377,17 @@ function MWX__send_email ($email_to, $email_from, $subject, $plain_body)
       $headers .= 'Content-type: text/html; charset=iso-8859-1' . "\r\n";
 
       // Additional headers
-      $headers .= "To: " . $email_to . "\r\n";        //"To: Mary <mary@example.com>, Kelly <kelly@example.com>" . "\r\n";
-      $headers .= "From: " . $email_from . "\r\n";    //"From: Birthday Reminder <birthday@example.com>" . "\r\n";
+// Not needed - duplication.
+//      $headers .= "To: " . $email_to . "\r\n";        //"To: Mary <mary@example.com>, Kelly <kelly@example.com>" . "\r\n";
+      $headers .= "From: " . $email_from_with_name . "\r\n";    //"From: Birthday Reminder <birthday@example.com>" . "\r\n";
                                        // $headers .= "Cc: birthdayarchive@example.com" . "\r\n";
                                        // $headers .= "Bcc: birthdaycheck@example.com" . "\r\n";
       // Mail it
       $bRetCode = @mail ($email_to, $subject, $message, $headers);
       if ($bRetCode)
-        MWX__log_event (__FILE__, __LINE__, "Successfully sent email from: $email_from to: $email_to. (mail() returned true)");
+        MWX__log_event (__FILE__, __LINE__, "Successfully sent email from: $email_from_with_name to: $email_to. (mail() returned true)");
       else
-        MWX__log_event (__FILE__, __LINE__, "ERROR: mail() failed. Error sending email from: $email_from to: $email_to.");
+        MWX__log_event (__FILE__, __LINE__, "ERROR: mail() failed. Error sending email from: $email_from_with_name to: $email_to.");
       }
 //DANIEL
 
@@ -475,5 +493,476 @@ function MWX__output_value ($value)
     return "<span style=$style>$value</span>";
 }
 //===========================================================================
+
+//===========================================================================
+//
+// Determine file MIME type
+// Ex: 'text/plain'
+//
+
+$_mime_exts = array
+   (
+   'ai' => 'application/postscript',
+   'aif' => 'audio/x-aiff',
+   'aifc' => 'audio/x-aiff',
+   'aiff' => 'audio/x-aiff',
+   'asc' => 'text/plain',
+   'au' => 'audio/basic',
+   'avi' => 'video/x-msvideo',
+   'bcpio' => 'application/x-bcpio',
+   'bin' => 'application/octet-stream',
+   'bmp' => 'image/bmp',
+   'cdf' => 'application/x-netcdf',
+   'class' => 'application/octet-stream',
+   'cpio' => 'application/x-cpio',
+   'cpt' => 'application/mac-compactpro',
+   'csh' => 'application/x-csh',
+   'css' => 'text/css',
+   'dcr' => 'application/x-director',
+   'dir' => 'application/x-director',
+   'djv' => 'image/vnd.djvu',
+   'djvu' => 'image/vnd.djvu',
+   'dll' => 'application/octet-stream',
+   'dms' => 'application/octet-stream',
+   'doc' => 'application/msword',
+   'dvi' => 'application/x-dvi',
+   'dxr' => 'application/x-director',
+   'eps' => 'application/postscript',
+   'etx' => 'text/x-setext',
+   'exe' => 'application/octet-stream',
+   'ez' => 'application/andrew-inset',
+   'gif' => 'image/gif',
+   'gtar' => 'application/x-gtar',
+   'hdf' => 'application/x-hdf',
+   'hqx' => 'application/mac-binhex40',
+   'htm' => 'text/html',
+   'html' => 'text/html',
+   'ice' => 'x-conference/x-cooltalk',
+   'ief' => 'image/ief',
+   'iges' => 'model/iges',
+   'igs' => 'model/iges',
+   'jpe' => 'image/jpeg',
+   'jpeg' => 'image/jpeg',
+   'jpg' => 'image/jpeg',
+   'js' => 'application/x-javascript',
+   'kar' => 'audio/midi',
+   'latex' => 'application/x-latex',
+   'lha' => 'application/octet-stream',
+   'lzh' => 'application/octet-stream',
+   'm3u' => 'audio/x-mpegurl',
+   'man' => 'application/x-troff-man',
+   'me' => 'application/x-troff-me',
+   'mesh' => 'model/mesh',
+   'mid' => 'audio/midi',
+   'midi' => 'audio/midi',
+   'mif' => 'application/vnd.mif',
+   'mov' => 'video/quicktime',
+   'movie' => 'video/x-sgi-movie',
+   'mp2' => 'audio/mpeg',
+   'mp3' => 'audio/mpeg',
+   'mpe' => 'video/mpeg',
+   'mpeg' => 'video/mpeg',
+   'mpg' => 'video/mpeg',
+   'mpga' => 'audio/mpeg',
+   'ms' => 'application/x-troff-ms',
+   'msh' => 'model/mesh',
+   'mxu' => 'video/vnd.mpegurl',
+   'nc' => 'application/x-netcdf',
+   'oda' => 'application/oda',
+   'pbm' => 'image/x-portable-bitmap',
+   'pdb' => 'chemical/x-pdb',
+   'pdf' => 'application/pdf',
+   'pgm' => 'image/x-portable-graymap',
+   'pgn' => 'application/x-chess-pgn',
+   'png' => 'image/png',
+   'pnm' => 'image/x-portable-anymap',
+   'ppm' => 'image/x-portable-pixmap',
+   'ppt' => 'application/vnd.ms-powerpoint',
+   'ps' => 'application/postscript',
+   'qt' => 'video/quicktime',
+   'ra' => 'audio/x-realaudio',
+   'ram' => 'audio/x-pn-realaudio',
+   'rar' => 'application/x-rar-compressed',
+   'ras' => 'image/x-cmu-raster',
+   'rgb' => 'image/x-rgb',
+   'rm' => 'audio/x-pn-realaudio',
+   'roff' => 'application/x-troff',
+   'rpm' => 'audio/x-pn-realaudio-plugin',
+   'rtf' => 'text/rtf',
+   'rtx' => 'text/richtext',
+   'sgm' => 'text/sgml',
+   'sgml' => 'text/sgml',
+   'sh' => 'application/x-sh',
+   'shar' => 'application/x-shar',
+   'silo' => 'model/mesh',
+   'sit' => 'application/x-stuffit',
+   'skd' => 'application/x-koan',
+   'skm' => 'application/x-koan',
+   'skp' => 'application/x-koan',
+   'skt' => 'application/x-koan',
+   'smi' => 'application/smil',
+   'smil' => 'application/smil',
+   'snd' => 'audio/basic',
+   'so' => 'application/octet-stream',
+   'spl' => 'application/x-futuresplash',
+   'src' => 'application/x-wais-source',
+   'sv4cpio' => 'application/x-sv4cpio',
+   'sv4crc' => 'application/x-sv4crc',
+   'swf' => 'application/x-shockwave-flash',
+   't' => 'application/x-troff',
+   'tar' => 'application/x-tar',
+   'tcl' => 'application/x-tcl',
+   'tex' => 'application/x-tex',
+   'texi' => 'application/x-texinfo',
+   'texinfo' => 'application/x-texinfo',
+   'tif' => 'image/tiff',
+   'tiff' => 'image/tiff',
+   'tr' => 'application/x-troff',
+   'tsv' => 'text/tab-separated-values',
+   'txt' => 'text/plain',
+   'ustar' => 'application/x-ustar',
+   'vcd' => 'application/x-cdlink',
+   'vrml' => 'model/vrml',
+   'wav' => 'audio/x-wav',
+   'wbmp' => 'image/vnd.wap.wbmp',
+   'wbxml' => 'application/vnd.wap.wbxml',
+   'wml' => 'text/vnd.wap.wml',
+   'wmlc' => 'application/vnd.wap.wmlc',
+   'wmls' => 'text/vnd.wap.wmlscript',
+   'wmlsc' => 'application/vnd.wap.wmlscriptc',
+   'wrl' => 'model/vrml',
+   'xbm' => 'image/x-xbitmap',
+   'xht' => 'application/xhtml+xml',
+   'xhtml' => 'application/xhtml+xml',
+   'xls' => 'application/vnd.ms-excel',
+   'xml' => 'text/xml',
+   'xpm' => 'image/x-xpixmap',
+   'xsl' => 'text/xml',
+   'xwd' => 'image/x-xwindowdump',
+   'xyz' => 'chemical/x-xyz',
+   'zip' => 'application/zip'
+   );
+
+function MWX__get_mime_type ($filename)
+{
+   global $_mime_exts;
+   $mime = "";
+
+   if (function_exists ('finfo_open'))
+      {
+      $finfo = finfo_open (FILEINFO_MIME);
+      $mime = finfo_file ($finfo, $filename);
+      finfo_close ($finfo);
+      }
+
+// NOTE: 'mime_content_type' gets confused about uppercased extensions, like '.MPG' and returns 'text/plain'.
+//
+//   else if (function_exists ('mime_content_type'))
+//      {
+//      $mime = mime_content_type ($filename);
+//      }
+
+   if (!$mime)
+      {
+      $fileinfo = pathinfo ($filename);
+      $extension = strtolower($fileinfo['extension']);
+      if (isset ($_mime_exts[$extension]))
+         $mime = $_mime_exts[$extension];
+      else
+         $mime = 'application/octet-stream';
+      }
+
+   return $mime;
+}
+//===========================================================================
+
+//===========================================================================
+//
+// Function returns array of files under PREMIUM_FILES directory. Format:
+//
+// $assoc_array = FALSE:
+//    /home/expeus/public_html/wp/PREMIUM_FILES/membership/gold/membership_gold.txt
+//    /home/expeus/public_html/wp/PREMIUM_FILES/membership/membership.txt
+//    /home/expeus/public_html/wp/PREMIUM_FILES/free/premium_free.txt
+//    /home/expeus/public_html/wp/PREMIUM_FILES/_FILES/how-to-sell-online.txt
+//    /home/expeus/public_html/wp/PREMIUM_FILES/sites.txt
+//
+// $assoc_array = TRUE:
+//    array ('dir'=>array('file1', 'file2'), 'dir/dirx'=>array('file4', 'file5', 'file6'));
+//
+//
+// Syntax:
+//    $files_array = array()
+//    MWX__enumerate_files_in_dir ('/home/expeus/public_html/wp/PREMIUM_FILES', $files_array);
+//    foreach ($files_array as $file) { echo '<br />' . $file; }
+//
+// '$skip_dirnames_array' = array ('css', 'img', 'js', 'UPLOADS', 'temporary', ); ...
+
+function MWX__enumerate_files_in_dir ($dirname, &$files_array, $assoc_array=FALSE, $skip_dirnames_array=FALSE)
+{
+   // Enumerate files/dirs in it.
+   // for each valid subdir call itself
+   if ($assoc_array)
+      $files_array[$dirname]=array();
+
+   $dh = @opendir (rtrim($dirname, '/') . '/');
+   if ($dh)
+      {
+      while (($objname = readdir($dh)) !== false)
+         {
+         $full_objname = rtrim($dirname, '/') . "/$objname";
+         if (is_dir($full_objname))
+            {
+            // This is dir
+            if ($objname == '.' || $objname == '..')
+               continue;
+
+            $path_parts = explode ('/', $full_objname);
+            $this_dir = array_pop ($path_parts);
+
+            if (isset($skip_dirnames_array) && is_array($skip_dirnames_array) && in_array ($this_dir, $skip_dirnames_array))
+               continue;   // Skip this directory
+
+            MWX__enumerate_files_in_dir ($full_objname, $files_array, $assoc_array, $skip_dirnames_array);
+            }
+         else
+            {
+            // This is file
+            if ($objname[0] != '.' && !preg_match ('@_denied(\.|$)@', $objname))
+               {
+               if ($assoc_array)
+                  $files_array[$dirname][] = $objname;
+               else
+                  $files_array[] = $full_objname; // Skip .htaccess and *_denied.* -type files
+               }
+            }
+         }
+      closedir($dh);
+      }
+
+   return ($files_array);
+}
+//===========================================================================
+
+//===========================================================================
+function MWX__visit_is_search_engine_spider ()
+{
+   return preg_match ('#(slurp|bot|sp[iy]der|scrub(by|the)|crawl(er|ing|@)|yandex)#i', (string)@$_SERVER['HTTP_USER_AGENT']);
+}
+//===========================================================================
+
+//===========================================================================
+function MWX__visit_from_search_engine ()
+{
+   return preg_match ('#^https?://[a-z]+\.(google|aol|live|msn|baidu|yandex|search|ask)\.#i', (string)@$_SERVER['HTTP_REFERER']);
+}
+//===========================================================================
+
+//===========================================================================
+function MWX__get_visitor_REMOTE_ADDR ()
+{
+		$ip_address = $_SERVER['REMOTE_ADDR'];
+		if (array_key_exists('HTTP_X_FORWARDED_FOR', $_SERVER))
+		{
+    	$forwarded_ips = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
+    	$ip_address = trim(array_pop($forwarded_ips));
+		}
+		return $ip_address;
+}
+//===========================================================================
+
+//===========================================================================
+function MWX__ip_addresses_matching ($ip_addr1, $ip_addr2, $cidr_mask)
+{
+	$mask = 0xFFFFFFFF << (32 - $cidr_mask);
+
+	$ip_addr1_masked = ip2long($ip_addr1) & $mask;
+	$ip_addr2_masked = ip2long($ip_addr2) & $mask;
+
+	return ($ip_addr1_masked == $ip_addr2_masked);
+}
+//===========================================================================
+
+//===========================================================================
+// Solves 2GB filesize limit on non-windows OS-es.
+function MWX__filesize ($full_filename)
+{
+   // Note: this type of filesize detection is not supported by hosting:
+   //       return (trim(`stat -c%s $full_filename`));
+
+   return @filesize ($full_filename);
+}
+//===========================================================================
+
+//===========================================================================
+/*
+  Get web page contents with the help of PHP cURL library
+
+  If '$easy' is set to FALSE, function returns assoc array[]:
+     "url"          - the last effective URL after redirects
+     "http_code"    - the last error/status code
+     "content_type" - the content type from the header
+     "content"      - the page content (text, image, etc.)
+     "errno"        - the CURL error code
+     "errmsg"       - the CURL error message
+
+    In this case:
+    - "success" is when array['http_code']==200, and return data will be in array['content']
+    - "fail"    is when array['http_code']!=200. Error codeas are: array['errno'] and array['errmsg']
+
+
+  If '$easy' is set to TRUE, function returns page contents or FALSE is some error occured.
+*/
+function MWX__file_get_contents ($url, $user_agent=FALSE)
+{
+   if (!function_exists('curl_init'))
+      {
+      return file_get_contents ($url);
+      }
+
+   $options = array(
+      CURLOPT_URL            => $url,
+      CURLOPT_RETURNTRANSFER => true,     // return web page
+      CURLOPT_HEADER         => false,    // don't return headers
+//      CURLOPT_FOLLOWLOCATION => true,     // follow redirects
+      CURLOPT_ENCODING       => "",       // handle compressed
+      CURLOPT_USERAGENT      => $user_agent?$user_agent:'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.2; .NET CLR 1.1.4322)', // who am i
+      CURLOPT_AUTOREFERER    => true,     // set referer on redirect
+      CURLOPT_CONNECTTIMEOUT => 60,       // timeout on connect
+      CURLOPT_TIMEOUT        => 60,       // timeout on response in seconds.
+      CURLOPT_MAXREDIRS      => 10,       // stop after 10 redirects
+      );
+
+   $ch      = curl_init   ();
+
+   if (function_exists('curl_setopt_array'))
+      {
+      curl_setopt_array      ($ch, $options);
+      }
+   else
+      {
+      // To accomodate older PHP 5.0.x systems
+      curl_setopt ($ch, CURLOPT_URL            , $url);
+      curl_setopt ($ch, CURLOPT_RETURNTRANSFER , true);     // return web page
+      curl_setopt ($ch, CURLOPT_HEADER         , false);    // don't return headers
+      curl_setopt ($ch, CURLOPT_ENCODING       , "");       // handle compressed
+      curl_setopt ($ch, CURLOPT_USERAGENT      , $user_agent?$user_agent:'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.2; .NET CLR 1.1.4322)'); // who am i
+      curl_setopt ($ch, CURLOPT_AUTOREFERER    , true);     // set referer on redirect
+      curl_setopt ($ch, CURLOPT_CONNECTTIMEOUT , 60);       // timeout on connect
+      curl_setopt ($ch, CURLOPT_TIMEOUT        , 60);       // timeout on response in seconds.
+      curl_setopt ($ch, CURLOPT_MAXREDIRS      , 10);       // stop after 10 redirects
+      }
+
+   $content = curl_exec   ($ch);
+   $err     = curl_errno  ($ch);
+   $header  = curl_getinfo($ch);
+   // $errmsg  = curl_error  ($ch);
+
+   curl_close             ($ch);
+
+   if (!$err && $header['http_code']==200)
+      return $content;
+   else
+      return FALSE;
+}
+//===========================================================================
+
+//===========================================================================
+//
+// Function returns associative array of complete information on all users, including custom metadata, product sales, and affiliate metadata.
+
+function MWX__Get_Users_Data ()
+{
+  global $wpdb;
+
+  $rows = $wpdb->get_results ("SELECT $wpdb->users.ID FROM $wpdb->users ORDER BY ID ASC", ARRAY_A);
+  if ($rows === FALSE)
+    {
+    return ("DB Error");
+    }
+  else
+    {
+    $all_users = array();
+    foreach ($rows as $row)
+      {
+      $user_data = get_userdata ($row['ID']);
+
+      $all_users[] = array (
+         'ID'                    => $user_data->ID,
+         'user_login'            => $user_data->user_login,
+         'user_email'            => $user_data->user_email,
+         'user_registered'       => $user_data->user_registered,
+         'user_activation_key'   => $user_data->user_activation_key,
+         'first_name'            => $user_data->first_name,
+         'last_name'             => $user_data->last_name,
+         'mwx_extra_user_data'   => MWX__get_usermeta_array ($row['ID'], 'mwx_extra_user_data'),
+         'mwx_purchases'         => MWX__get_usermeta_array ($row['ID'], 'mwx_purchases'),
+         'mwx_aff_info'          => MWX__get_usermeta_array ($row['ID'], 'mwx_aff_info'),
+         );
+      }
+
+    return ($all_users);
+    }
+}
+//===========================================================================
+
+//===========================================================================
+//
+// for some reason Wordpress': email_exists('new_user@email.com') returns false for just created users. These functions will solve this.
+// It will save info about just created user inside of $_inputs array "cache".
+
+function MWX__email_exists ($email)
+{
+   global $_inputs;
+
+   if (isset($_inputs['__user_info'][$email]) && is_array($_inputs['__user_info'][$email]) && isset($_inputs['__user_info'][$email]['user_id']) && $_inputs['__user_info'][$email]['user_id'])
+      {
+      MWX__log_event (__FILE__, __LINE__, "Cache hit for: MWX__email_exists($email). Returning cached user_id = " . $_inputs['__user_info'][$email]['user_id']);
+      return ($_inputs['__user_info'][$email]['user_id']);
+      }
+
+   MWX__log_event (__FILE__, __LINE__, "Cache miss for: MWX__email_exists($email)");
+
+   // Save it in cache after first detection
+   $user_id = email_exists ($email);
+   if ($user_id)
+      $_inputs['__user_info'][$email]['user_id'] = $user_id;
+
+   MWX__log_event (__FILE__, __LINE__, "Returning final user_id = $user_id");
+   return ($user_id);
+}
+
+
+function MWX__wp_create_user ($actual_username, $actual_password, $email)
+{
+   global $_inputs;
+
+   if (isset($_inputs['__user_info'][$email]['user_id']) && $_inputs['__user_info'][$email]['user_id'])
+      {
+      // Return data from cache
+      MWX__log_event (__FILE__, __LINE__, "Cache hit for: MWX__wp_create_user($actual_username, $actual_password, $email)");
+      return ($_inputs['__user_info'][$email]['user_id']);
+      }
+
+   MWX__log_event (__FILE__, __LINE__, "Cache miss for: MWX__wp_create_user($actual_username, $actual_password, $email). Creating new user via wp_create_user()...");
+
+   $user_id = wp_create_user ($actual_username, $actual_password, $email);
+   if (!is_int($user_id))
+      {
+      // When username or email already registered this function returns Object with warning message inside (instead of FALSE or existing user_id/name - silly!).
+      // Prudent thing to do is try to determine existing username.
+      $user_id = email_exists ($email);
+      MWX__log_event (__FILE__, __LINE__, "MWX__wp_create_user(): wp_create_user() returned this:\n" . serialize($user_id) . "\n             Subsequent call to email_exists($email) returned this user_id: '$user_id'");
+      }
+
+   if (is_array($_inputs))
+      {
+      $_inputs['__user_info'][$email]['user_id'] = $user_id;
+      }
+
+   return $user_id;
+}
+//===========================================================================
+
 
 ?>

@@ -107,7 +107,8 @@ include_once (dirname(__FILE__) . '/mwx-include-all.php');     // This will load
    //---------------------------------------
    // Sanitize posted variables into '$_inputs' array
    //
-   $_inputs['item_name']         = isset($_MWX_POST['item_name'])?$_MWX_POST['item_name']:(isset($_MWX_POST['item_name1'])?$_MWX_POST['item_name1']:(isset($_MWX_POST['memo'])?$_MWX_POST['memo']:"Unknown Item Name"));
+   $_inputs['item_name']         = isset($_MWX_POST['item_name'])?$_MWX_POST['item_name']:(isset($_MWX_POST['item_name1'])?$_MWX_POST['item_name1']:(isset($_MWX_POST['memo'])?$_MWX_POST['memo']:(@$_MWX_POST['product_name']?$_MWX_POST['product_name']:"Unknown Item Name")));
+      $_inputs['item_name']         = str_replace ("'", "", $_inputs['item_name']);
    $_inputs['first_name']        = isset($_MWX_POST['first_name'])?$_MWX_POST['first_name']:"";
    $_inputs['last_name']         = isset($_MWX_POST['last_name'])?$_MWX_POST['last_name']:"";
    $_inputs['payer_email']       = isset($_MWX_POST['payer_email'])?$_MWX_POST['payer_email']:(isset($_MWX_POST['sender_email'])?$_MWX_POST['sender_email']:"");
@@ -118,7 +119,7 @@ include_once (dirname(__FILE__) . '/mwx-include-all.php');     // This will load
    $_inputs['recurring']         = isset($_MWX_POST['recurring'])?$_MWX_POST['recurring']:NULL;
    $_inputs['period3']           = isset($_MWX_POST['period3'])?$_MWX_POST['period3']:NULL;
    $_inputs['payment_status']    = isset($_MWX_POST['payment_status'])?strtolower($_MWX_POST['payment_status']):($adaptive_transaction?"completed":"unknown");
-   $_inputs['mc_amount3_gross']  = isset($_MWX_POST['mc_gross'])?$_MWX_POST['mc_gross']:(isset($_MWX_POST['mc_amount3'])?$_MWX_POST['mc_amount3']:(isset($_MWX_POST['mc_amount2'])?$_MWX_POST['mc_amount2']:(isset($_MWX_POST['mc_amount1'])?$_MWX_POST['mc_amount1']:"0"))); // mc_gross is set for 1st notif., mc_amount3 for 2nd.
+   $_inputs['mc_amount3_gross']  = isset($_MWX_POST['mc_gross'])?$_MWX_POST['mc_gross']:(isset($_MWX_POST['mc_amount3'])?$_MWX_POST['mc_amount3']:(isset($_MWX_POST['mc_amount2'])?$_MWX_POST['mc_amount2']:(isset($_MWX_POST['mc_amount1'])?$_MWX_POST['mc_amount1']:(@$_MWX_POST['payment_gross']?$_MWX_POST['payment_gross']:"0")))); // mc_gross is set for 1st notif., mc_amount3 for 2nd.
    if (!$_inputs['mc_amount3_gross'] && isset($_inputs['custom']['tsa']))
       $_inputs['mc_amount3_gross'] = $_inputs['custom']['tsa']; // Passed in some cases, such as when MWX generates pay button and knows total amount of sale.)
 
@@ -141,6 +142,10 @@ include_once (dirname(__FILE__) . '/mwx-include-all.php');     // This will load
       $_inputs['is_sandbox'] = TRUE;
    else
       $_inputs['is_sandbox'] = FALSE;
+
+   // It might be possible to pass extra fields for Mailchimp integration.
+   $_inputs['MMERGE3']           = (@$_MWX_POST['option_name3']=='MMERGE3')?@$_MWX_POST['option_selection3']:"";
+   $_inputs['MMERGE4']           = (@$_MWX_POST['option_name4']=='MMERGE4')?@$_MWX_POST['option_selection4']:"";
    //---------------------------------------
 
    //---------------------------------------
@@ -160,9 +165,9 @@ include_once (dirname(__FILE__) . '/mwx-include-all.php');     // This will load
          $username_key = $password_key;
 
          $i=$username_key[16];
-         if ($i)
+         if (ctype_digit((string)$i) && $i)
             {
-            $username_key[16] = $i-1;
+            $username_key[16] = (string)($i-1);
 
             $_inputs['desired_username'] = $_MWX_POST[$username_key];
             $_inputs['desired_password'] = $_MWX_POST[$password_key];
@@ -193,6 +198,27 @@ include_once (dirname(__FILE__) . '/mwx-include-all.php');     // This will load
    //---------------------------------------
 
    //---------------------------------------
+   // Check if this request is coming from another payment processor or shopping cart that just chain - re-POSTs paypal event params
+   if (@$skip_postback ||
+      ($mwx_settings['universal_paypal_integration_enabled'] && @$_REQUEST['skip_postback'] && (@$_REQUEST['mwx_api_key'] == $mwx_settings['mwx_api_key']))
+      )
+
+      {
+      MWX__log_event (__FILE__, __LINE__, "Note: Universal Paypal Integration with third party systems is enabled and 'skip_postback' is set. Skipping Paypal POSTBACK. Continue processing ...");
+      MWX__TransactionTypeSwitch ();
+      exit;
+      }
+   //---------------------------------------
+
+   //---------------------------------------
+   if ($_inputs['txn_type'] == 'subscr_signup')
+      {
+      MWX__log_event (__FILE__, __LINE__, "Delaying 'subscr_signup' processing for 1 second ...");
+      sleep (1);  // Delay for 1 second to yield to possibly simultaneous 'subscr_payment' event to avoid creating duplicate identical account.
+      }
+   //---------------------------------------
+
+   //---------------------------------------
    // Now paypal requires this for "everything that hits the script". See:
    // http://paypaldeveloper.com/pdn/board/message?board.id=ipn&thread.id=19454&view=by_date_ascending&page=1
    //
@@ -204,12 +230,14 @@ include_once (dirname(__FILE__) . '/mwx-include-all.php');     // This will load
       {
       // Sandbox version
       MWX__log_event (__FILE__, __LINE__, "Note: Will be using Paypal Sandbox option - testing mode");
-      $fp = fsockopen ('ssl://www.sandbox.paypal.com', 443, $errno, $errstr, 30);
+      $paypal_postback_host = 'ipnpb.sandbox.paypal.com';
+      $fp = fsockopen ('ssl://' . $paypal_postback_host, 443, $errno, $errstr, 30);
       }
    else
       {
       // No Sandbox version
-      $fp = fsockopen ('ssl://www.paypal.com',         443, $errno, $errstr, 30);
+      $paypal_postback_host = 'ipnpb.paypal.com';
+      $fp = fsockopen ('ssl://' . $paypal_postback_host, 443, $errno, $errstr, 30);
       }
 
    if (!$fp)
@@ -223,8 +251,10 @@ include_once (dirname(__FILE__) . '/mwx-include-all.php');     // This will load
    MWX__log_event (__FILE__, __LINE__, "About to send back to Paypal: $_req");
 
    // post back to PayPal system to validate
-   $header =  "POST /cgi-bin/webscr HTTP/1.0\r\n";
+   $header  = "POST /cgi-bin/webscr HTTP/1.1\r\n";
    $header .= "Content-Type: application/x-www-form-urlencoded\r\n";
+   $header .= "Host: $paypal_postback_host\r\n";
+   $header .= "Connection: close\r\n";
    $header .= "Content-Length: " . strlen($_req) . "\r\n\r\n";
 
    $iBytesWritten = fputs ($fp, $header . $_req);
@@ -236,7 +266,7 @@ include_once (dirname(__FILE__) . '/mwx-include-all.php');     // This will load
 
    while (!feof($fp))
       {
-      $res = fgets ($fp, 1024);
+      $res = trim(fgets ($fp, 1024));
       if (strtoupper($res) == "VERIFIED")
          {
          MWX__log_event (__FILE__, __LINE__, "Note: Received '$res' after sending POST back to Paypal. (txn_type={$_inputs['txn_type']} from {$_inputs['payer_email']} for {$_inputs['item_name']})");
@@ -264,6 +294,7 @@ include_once (dirname(__FILE__) . '/mwx-include-all.php');     // This will load
       }
 
    fclose ($fp);
+
    MWX__log_event (__FILE__, __LINE__, "Done. ==========================================");
 
 ?>

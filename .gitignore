@@ -1,0 +1,9 @@
+# macOS
+.DS_Store
+
+# License signing material and issued-key records must never be committed
+license-generator/keys/
+license-generator/issued-licenses.log
+
+# The installable zip in dist/ is a deliverable and IS tracked on purpose —
+# rebuild it from memberwing-x/ with the zip command in README.md.

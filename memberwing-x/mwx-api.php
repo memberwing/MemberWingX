@@ -22,13 +22,14 @@
 
          'build_affiliate_link' - Create affiliate link for already existing affiliate
             'destination_url'    -  Merchant page on merchant's site - final original destination
-            'aff_id'             -  mandatory: main affiliate ID as returned by above 'create_affiliate' call to affiliate network
+            'aff_id' OR 'aff_id1'-  mandatory: main tier affiliate ID as returned by above 'create_affiliate' call to affiliate network
             'aff_id2'            -  optional: tier2 affiliate ID as returned by 'create_affiliate' call to affiliate network
             'aff_id3'            -  optional: tier3 affiliate ID as returned by 'create_affiliate' call to affiliate network
             'aff_id4'            -  optional: tier4 affiliate ID as returned by 'create_affiliate' call to affiliate network
             'aff_id5'            -  optional: tier5 affiliate ID as returned by 'create_affiliate' call to affiliate network
 
          'get_afnet_settings' -  Retrieve affiliate network settings
+         'get_members_info'   -  Retrieve detailed information about all members, products owned and affiliate referral information.
 
 
    Examples:
@@ -127,7 +128,7 @@ function MWX_ProcessAPIRequest ($mwx_settings)
 
       case  'build_affiliate_link'  :
          $affiliate_link = trim (@$_INPUT_REQUEST['destination_url'], '&?/');
-         if (!$affiliate_link || !@$_INPUT_REQUEST['aff_id'])
+         if (!$affiliate_link || !(@$_INPUT_REQUEST['aff_id'] || @$_INPUT_REQUEST['aff_id1']))
             {
             MWX__log_event (__FILE__, __LINE__, "===== MWX API Request: 'build_affiliate_link' requested with bad parameters: 'destination_url'={$_INPUT_REQUEST['destination_url']}, 'aff_id'={$_INPUT_REQUEST['aff_id']}. Aborting");
             $reply_data ['error_code'] = '3';
@@ -142,6 +143,8 @@ function MWX_ProcessAPIRequest ($mwx_settings)
          // Append main affiliate's id
          if (isset($_INPUT_REQUEST['aff_id']) && $_INPUT_REQUEST['aff_id'])
             $affiliate_link .= "aff={$_INPUT_REQUEST['aff_id']}";
+         else if (isset($_INPUT_REQUEST['aff_id1']) && $_INPUT_REQUEST['aff_id1'])  // Basf request
+            $affiliate_link .= "aff={$_INPUT_REQUEST['aff_id1']}";
 
          // Append affiliate's id's of tiers.
          if (isset($_INPUT_REQUEST['aff_id2']) && $_INPUT_REQUEST['aff_id2'])
@@ -158,6 +161,10 @@ function MWX_ProcessAPIRequest ($mwx_settings)
 
       case 'get_afnet_settings'     :
          $reply_data ['reply_data'] = MWX__GetAffiliateNetworkSettings ($mwx_settings);
+         break;
+
+      case 'get_members_info'       :
+         $reply_data ['reply_data'] = MWX__Get_Users_Data ();
          break;
 
       default:

@@ -1,0 +1,27 @@
+/* mwx-admin.css */
+
+#dirs_listing_div { font-family:Arial, Helvetica, Sans-Serif; font-size:0.83em;}
+#dirs_listing_table { border-collapse:collapse;}
+#dirs_listing_table h4 { margin:0px; padding:0px;}
+#dirs_listing_table img { }
+#dirs_listing_table ul { margin:10px 0 10px 40px; padding:0px;}
+#dirs_listing_table th { background:#7CB8E2 url(dir_header_bkg.png) repeat-x scroll center left; color:#fff; padding:3px 3px; text-align:left;}
+#dirs_listing_table td { background:#C7DDEE none repeat-x scroll center left; color:#000; padding:2px 2px;}
+#dirs_listing_table td textarea {overflow:auto; }
+#dirs_listing_table tr.tr_visible td { background:#fff url(dir_row_bkg.png) repeat-x scroll center left; cursor:pointer; }
+#dirs_listing_table div.arrow  { background:transparent url(arrows.png) no-repeat scroll 0px -16px; width:16px; height:16px; display:block;}
+#dirs_listing_table div.arrow2 { background:transparent url(arrows.png) no-repeat scroll 0px -16px; width:16px; height:16px; display:block;}
+#dirs_listing_table div.up { background-position:0px 0px;}
+
+#files_listing_div { font-family:Arial, Helvetica, Sans-Serif; font-size:0.83em;}
+#files_listing_table { border-collapse:collapse;}
+#files_listing_table h4 { margin:0px; padding:0px;}
+#files_listing_table img { }
+#files_listing_table ul { margin:10px 0 10px 40px; padding:0px;}
+#files_listing_table th { background:#7ce292 url(file_header_bkg.png) repeat-x scroll center left; color:#fff; padding:3px 3px; text-align:left;}
+#files_listing_table td { background:#c7eed7 none repeat-x scroll center left; color:#000; padding:2px 2px;}
+#files_listing_table td textarea {overflow:auto; }
+#files_listing_table tr.tr_visible td { background:#fff url(file_row_bkg.png) repeat-x scroll center left; cursor:pointer; }
+#files_listing_table div.arrow  { background:transparent url(arrows.png) no-repeat scroll 0px -16px; width:16px; height:16px; display:block;}
+#files_listing_table div.arrow2 { background:transparent url(arrows.png) no-repeat scroll 0px -16px; width:16px; height:16px; display:block;}
+#files_listing_table div.up { background-position:0px 0px;}

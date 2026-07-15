@@ -40,10 +40,6 @@ function MWX__ResetInputs (&$_inputs)
       'txn_id'                   => '',
       'parent_txn_id'            => '',
       'txn_type'                 => '',
-      'payment_status'           => '',
-      'txn_type'                 => '',
-      'txn_type'                 => '',
-      'txn_type'                 => '',
       'receiver_email'           => '',
       'pdc_secret'               => '',
       'customer_ip'              => '',
@@ -72,6 +68,9 @@ function MWX__TransactionTypeSwitch ()
 {
    global $_inputs;
 
+   // Fix urldecoded email addresses that contained '+' in it.
+   $_inputs['payer_email'] = str_replace (' ', '+', $_inputs['payer_email']);
+
    // check the payment_status is Completed
    // check that txn_type+txn_id has not been previously processed
    // check that receiver_email is your Primary PayPal email
@@ -81,13 +80,20 @@ function MWX__TransactionTypeSwitch ()
 
    switch ($_inputs['txn_type'])
       {
-      case "cart":            // One time payment/purchase
+      case "cart":                  // One time payment/purchase
+      case "ejgift":                // e-junkie 100% off coupon.
       case "web_accept":
       case "express_checkout" :
       case "mass_pay" :
       case "send_money" :
       case "virtual_terminal" :
-      case "A_pay" :             // Adaptive transaction - single item payment.
+      case "A_pay" :                // Adaptive transaction - single item payment.
+      case "one_time_pay" :
+      case "SALE":                  // Clickbank: The purchase of a standard product or the initial purchase of recurring billing product.
+      case "TEST_SALE":             // Clickbank: test sale
+      case "UNCANCEL-REBILL":       // Clickbank: Reversing the cancellation of a recurring billing product. Re-add user to premiums. MW 4.x for this case called NU__Add_New_User();
+      case 'ORDER_CREATED':         // 2CO
+      case 'RECURRING_RESTARTED':   // 2CO
          if ($_inputs['payment_status'] == 'completed')
             {
             if (@$_inputs['custom']['evt'] == 'aff_payout')
@@ -110,12 +116,15 @@ function MWX__TransactionTypeSwitch ()
          break;
 
       case "subscr_signup":   // Subscription creation - 2nd Notification
+      case "recurring_payment_profile_created":
          MWX__log_event (__FILE__, __LINE__, "Success1: New subscription signup from {$_inputs['payer_email']} for {$_inputs['item_name']}.");
          MWX__Product_Purchased ();  // Single item or subscription purchased. Enter product in user's metadata.
          break;
 
       case "subscr_payment":  // Regular subscription payment - 1st notification
       case "recurring_payment":
+      case "BILL":            // Clickbank: Recurring installment
+      case 'RECURRING_INSTALLMENT_SUCCESS':  // 2CO
          MWX__log_event (__FILE__, __LINE__, "Installment payment processed for {$_inputs['payer_email']} for {$_inputs['item_name']}.");
          MWX__Payment_Received ();   // Track payment for affiliate purposes;
          break;   // For subscriptions, only "subscr_signup" will be allowed to add new user.
@@ -127,13 +136,27 @@ function MWX__TransactionTypeSwitch ()
          break;
 
       case "subscr_eot":      // Subscription ended normally.
+      case "recurring_payment_expired":
+      case 'RECURRING_COMPLETE': // 2CO
          MWX__log_event (__FILE__, __LINE__, "Cancel-1: Subscription ended normally for '{$_inputs['payer_email']}'");
          MWX__Subscription_Ended ();  // Subscription ended normally.
          break;
 
       case "refund":
       case "A_refund":
+      case "RFND":                           // Clickbank: Refund
+      case "CGBK":                           // Clickbank: Chargeback for any payment
+      case "INSF":                           // Clickbank: Chargeback for eCheck
+      case "CANCEL-REBILL":                  // Clickbank: The cancellation of a recurring billing product. Recurring billing products that are canceled do not result in any other action.
+      case 'REFUND_ISSUED':                  // 2C0
+      case 'RECURRING_INSTALLMENT_FAILED':   // 2C0
+      case 'RECURRING_STOPPED':              // 2C0
          MWX__log_event (__FILE__, __LINE__, "Refund: Refund request for: '{$_inputs['payer_email']}' for product: '{$_inputs['item_name']}'");
+         MWX__Payment_Cancelled ();
+         break;
+
+      case "__fraud_detected":   // 2C0 / fraud detected.
+         MWX__log_event (__FILE__, __LINE__, "Fraud detected for: '{$_inputs['payer_email']}' for product: '{$_inputs['item_name']}'");
          MWX__Payment_Cancelled ();
          break;
 
@@ -151,9 +174,7 @@ function MWX__TransactionTypeSwitch ()
 
 function MWX__Get_Admin_Email ()
 {
-   $admin_email = get_settings('admin_email');
-   if (!$admin_email)
-      $admin_email = get_option('admin_email');
+   $admin_email = get_option('admin_email');
 
    if (!$admin_email)
       $admin_email = "webmaster@" . preg_replace ('#^(www\.)?(.*)$#', "$2", $_SERVER['HTTP_HOST']);
@@ -173,9 +194,15 @@ function MWX__Product_Purchased ()
    // Create new user and assign him to requested level.
    // Make sure username will be unique, and add it to WP dbase.
    $i=1;
-   $actual_username = $_inputs['desired_username'];
+   $actual_username = $_inputs['desired_username']?$_inputs['desired_username']:$_inputs['payer_email'];
+   $actual_username = str_replace (' ', '', $actual_username);
+   $actual_username = str_replace ('+', '', $actual_username);
+
+
    while (username_exists($actual_username))
+      {
       $actual_username = $_inputs['desired_username'] . $i++;
+      }
 
    if ($_inputs['desired_password'])
       $actual_password = $_inputs['desired_password'];
@@ -188,7 +215,7 @@ function MWX__Product_Purchased ()
    $admin_email = MWX__Get_Admin_Email ();
 
    // See if user already exists.
-   $user_id = email_exists ($_inputs['payer_email']);
+   $user_id = MWX__email_exists ($_inputs['payer_email']);
 
    // Generate email body. Process these variables:
    // {FIRST_NAME}, {LAST_NAME}, {ITEM_NAME}, {USERNAME}, {PASSWORD}, {BLOG_ROOT_URL}, {BLOG_LOGIN_URL}
@@ -197,7 +224,11 @@ function MWX__Product_Purchased ()
       // User already exists - use existing credentials.
       $user_data = get_userdata ($user_id);
       $actual_username = $user_data->user_login;
-      $actual_password = '(EXISTING-PASSWORD)';
+
+      // Validate user password for existing Wordpress account
+      $wp_user = new WP_User ($user_id);
+      if (!wp_check_password ($actual_password, $wp_user->user_pass, $user_id))
+         $actual_password = '(EXISTING-PASSWORD)';
       }
 
    $mwx_settings = MWX__get_settings ();
@@ -216,7 +247,7 @@ function MWX__Product_Purchased ()
       // Duplicate transaction or duplicate subscription creation event (already existing 'subscr_id') check here.
       if (!MWX__Duplicate_Product_Transaction ($user_id, $_inputs['subscr_id'], $_inputs['txn_id']))
          {
-         if ($user_data && $user_data->user_level==10)
+         if ($user_data && user_can ($user_data->ID, 'manage_options'))
             {
             // User is admin already. Probably admin is testing with his own account...
             // Nothing to do
@@ -241,25 +272,31 @@ function MWX__Product_Purchased ()
             MWX__Add_New_Transaction_For_User ($user_id);
             //--------------------------------------------
 
-            // Notify registered user
-            //
-            MWX__send_email (
-               $_inputs['payer_email'],  // To
-               $admin_email,  // From
-               $welcome_email_subject,
-               $welcome_email_body
-               );
+            if (empty($_inputs['__user_info'][$_inputs['payer_email']]['welcome_email_sent']))
+               {
+               // Prevent delivery of duplicate emails
+               $_inputs['__user_info'][$_inputs['payer_email']]['welcome_email_sent'] = true;
 
-            // Notify admin
-            MWX__send_email (
-               $admin_email,  // To
-               $admin_email,  // From
-               "Existing subscriber: {$_inputs['payer_email']}($actual_username) made a purchase",
-               "{$_inputs['first_name']} {$_inputs['last_name']} ({$_inputs['payer_email']}) ($actual_username / $actual_password) purchased '{$_inputs['item_name']}'"
-               );
+               // Notify registered user
+               //
+               MWX__send_email (
+                  $_inputs['payer_email'],  // To
+                  $admin_email,  // From
+                  $welcome_email_subject,
+                  $welcome_email_body
+                  );
+
+               // Notify admin
+               MWX__send_email (
+                  $admin_email,  // To
+                  $admin_email,  // From
+                  "Existing subscriber: {$_inputs['payer_email']}($actual_username) made a purchase",
+                  "{$_inputs['first_name']} {$_inputs['last_name']} ({$_inputs['payer_email']}) ($actual_username / $actual_password) purchased '{$_inputs['item_name']}'"
+                  );
+               }
 
             // Add user to autoresponders
-            MWX__AddUserToAutoresponder ($user_id, $mwx_settings);
+            MWX__AddUserToAutoresponder ($user_id, $mwx_settings, $_inputs['item_name']);
             }
          }
       else
@@ -273,7 +310,20 @@ function MWX__Product_Purchased ()
       // User does not exist - create new one.
       MWX__log_event (__FILE__, __LINE__, "Success2: Registering new user. email: {$_inputs['payer_email']}, L/P: $actual_username/$actual_password");
 
-      $user_id = wp_create_user ($actual_username, $actual_password, $_inputs['payer_email']);
+      // this global variable prevents a double call to subscribe on purchase due to a call attached to registration
+      global $in_process_purchase;
+      $in_process_purchase = true;
+      $user_id = MWX__wp_create_user ($actual_username, $actual_password, $_inputs['payer_email']);
+      if (!$user_id)
+         {
+         MWX__log_event (__FILE__, __LINE__, "ERROR: Cannot create user: '$actual_username' (email: '{$_inputs['payer_email']}')");
+         }
+
+      if (@$_inputs['first_name'])
+         update_user_meta ($user_id, 'first_name', $_inputs['first_name']);
+
+      if (@$_inputs['last_name'])
+         update_user_meta ($user_id, 'last_name', $_inputs['last_name']);
 
       //--------------------------------------------
       // Add new product purchased to user's metadata.
@@ -281,25 +331,31 @@ function MWX__Product_Purchased ()
       MWX__Add_New_Transaction_For_User ($user_id);
       //--------------------------------------------
 
-      // Notify new user
-      //
-      MWX__send_email (
-         $_inputs['payer_email'],  // To
-         $admin_email,  // From
-         $welcome_email_subject,
-         $welcome_email_body
-         );
+      if (empty($_inputs['__user_info'][$_inputs['payer_email']]['welcome_email_sent']))
+         {
+         // Prevent delivery of duplicate emails
+         $_inputs['__user_info'][$_inputs['payer_email']]['welcome_email_sent'] = true;
 
-      // Notify admin
-      MWX__send_email (
-         $admin_email,  // To
-         $admin_email,  // From
-         "New user made a purchase: {$_inputs['payer_email']} ($actual_username)",
-         "{$_inputs['first_name']} {$_inputs['last_name']} ({$_inputs['payer_email']}) ($actual_username / $actual_password) just purchased '{$_inputs['item_name']}'"
-         );
+         // Notify new user
+         //
+         MWX__send_email (
+            $_inputs['payer_email'],  // To
+            $admin_email,  // From
+            $welcome_email_subject,
+            $welcome_email_body
+            );
+
+         // Notify admin
+         MWX__send_email (
+            $admin_email,  // To
+            $admin_email,  // From
+            "New user made a purchase: {$_inputs['payer_email']} ($actual_username)",
+            "{$_inputs['first_name']} {$_inputs['last_name']} ({$_inputs['payer_email']}) ($actual_username / $actual_password) just purchased '{$_inputs['item_name']}'"
+            );
+         }
 
       // Add user to autoresponders
-      MWX__AddUserToAutoresponder ($user_id, $mwx_settings);
+      MWX__AddUserToAutoresponder ($user_id, $mwx_settings, $_inputs['item_name']);
       }
 
    MWX__log_event (__FILE__, __LINE__, "Success3: Done.");
@@ -314,7 +370,7 @@ function MWX__Add_New_Transaction_For_User ($user_id)
 {
    global $_inputs;
 
-   $products_purchased = maybe_unserialize(get_usermeta ($user_id, 'mwx_purchases'));
+   $products_purchased = MWX__GetListOfProductsForUser ($user_id);
    if (!is_array($products_purchased))
       $products_purchased = array();
 
@@ -347,7 +403,7 @@ function MWX__Add_New_Transaction_For_User ($user_id)
          // Adding new, unique transaction for this product.
          $products_purchased[$idx]['txn_ids'][] = $_inputs['txn_id'];
          $products_purchased[$idx]['product_status'] = 'active';   // Make sure subscription is active when user is paying. It could of been marked as 'inactive' in Payment_Cancelled() call.
-         update_usermeta ($user_id, 'mwx_purchases', serialize ($products_purchased));
+         update_user_meta ($user_id, 'mwx_purchases', serialize ($products_purchased));
          MWX__log_event (__FILE__, __LINE__, "Added new recurring transaction/payment record for already existing subscription for user: {$_inputs['payer_email']}, subscription: '{$_inputs['item_name']}'.");
          return;
          }
@@ -362,18 +418,22 @@ function MWX__Add_New_Transaction_For_User ($user_id)
    else
       $txn_ids = array ();
 
+   $product_name = str_replace ("'", "", $_inputs['item_name']);
+
    $products_purchased[] =
       array (
          'product_id'      => $product_id,
-         'product_name'    => $_inputs['item_name'],
+         'product_name'    => $product_name,
          'purchase_date'   => $_inputs['U_txn_date'],
+         'full_sale_amt'   => $_inputs['mc_amount3_gross'],
+         'expiry_date'     => MWX__GetProductExpiryDate ($product_name, $_inputs['U_txn_date']),
          'txn_ids'         => $txn_ids,
          'subscr_id'       => $_inputs['subscr_id'],
          'referred_by_id'  => $_inputs['referred_by_id'],   // Affiliate's id (user_id) who refered this purchase
-         'product_status'  => 'active',      // 'active'(customer is in good standing), 'cancelled'(subscription), 'ended'(subscription ended normally), 'refunded'(one of payments was refunded), 'deactivated'(manually set by admin)
+         'product_status'  => 'active',      // 'active'(customer is in good standing), 'cancelled'(subscription), 'ended'(subscription ended normally), 'expired'(forced expiry date reached), 'refunded'(one of payments was refunded), 'deactivated'(manually set by admin)
          );
 
-   update_usermeta ($user_id, 'mwx_purchases', serialize ($products_purchased));
+   update_user_meta ($user_id, 'mwx_purchases', serialize ($products_purchased));
    MWX__log_event (__FILE__, __LINE__, "Added new product/transaction for user: {$_inputs['payer_email']}, product: '{$_inputs['item_name']}'.");
 }
 //===========================================================================
@@ -388,12 +448,12 @@ function MWX__Payment_Received ()
 
    //--------------------------------------------
    // Make sure buyer exists as a member of blog before processing any affiliate stuff.
-   $user_id = email_exists ($_inputs['payer_email']);
+   $user_id = MWX__email_exists ($_inputs['payer_email']);
    if (!$user_id)
       {
       MWX__log_event (__FILE__, __LINE__, "Note: buyer '{$_inputs['payer_email']}' of product '{$_inputs['item_name']}' does not yet exist. Creating him...");
       MWX__Product_Purchased (); // Create new user for this payment. It is possible that subscription payment came ahead of subscription creation. In this case we need to call this.
-      $user_id = email_exists ($_inputs['payer_email']);
+      $user_id = MWX__email_exists ($_inputs['payer_email']);
       }
 
    if (!$user_id)
@@ -404,6 +464,20 @@ function MWX__Payment_Received ()
    //--------------------------------------------
 
    $mwx_settings = MWX__get_settings ();
+
+   // Check if static affiliate referrer ID is set and non-empty (this is the one that possibly came through invitation code).
+   // If it is - it will override possibly present dynamic affiliate referrer id.
+   $mwx_extra_user_data = MWX__get_usermeta_array ($user_id, 'mwx_extra_user_data');
+   if (isset($mwx_extra_user_data['referred_by_id']) && $mwx_extra_user_data['referred_by_id'])
+      {
+      if ($_inputs['referred_by_id'])
+         MWX__log_event (__FILE__, __LINE__, "NOTE: Overriding currently present dynamic affiliate referrer ID '{$_inputs['referred_by_id']}' with static one (that came with an invitation code): '{$mwx_extra_user_data['referred_by_id']}'");
+      else
+         MWX__log_event (__FILE__, __LINE__, "NOTE: Force-setting affiliate referrer ID to static ID (that came with an invitation code): '{$mwx_extra_user_data['referred_by_id']}'");
+
+      // Overwrite dynamic affiliate id with static one
+      $_inputs['referred_by_id'] = $mwx_extra_user_data['referred_by_id'];
+      }
 
    //--------------------------------------------
    // Record new (only if unique) transaction/subscription in user metadata.
@@ -530,7 +604,7 @@ function MWX__Payment_Received ()
                         );
 
                   // Update info for this affiliate
-                  update_usermeta ($aff_info['aff_id'], 'mwx_aff_info', serialize ($aff_info['mwx_aff_info']));
+                  update_user_meta ($aff_info['aff_id'], 'mwx_aff_info', serialize ($aff_info['mwx_aff_info']));
 
                   $t = $tier+1;
                   MWX__log_event (__FILE__, __LINE__, "Note: Added new transaction for tier $t affiliate: '{$aff_info['aff_email']}'. Added commission amount: \$$affiliate_payout  for product {$_inputs['item_name']} (\${$_inputs['mc_amount3_gross']}) purchased by {$_inputs['payer_email']}");
@@ -600,20 +674,22 @@ function MWX__Subscription_Cancelled ()
 {
    global $_inputs;
 
+   $mwx_settings = MWX__get_settings ();
+
    if (!isset($_inputs['subscr_id']) || !$_inputs['subscr_id'])
       {
       MWX__log_event (__FILE__, __LINE__, "WARNING: Cannot process subscription cancellation without valid 'subscr_id' set. Exiting...");
       return; // Cannot do anything without valid 'subscr_id'
       }
 
-   $user_id = email_exists ($_inputs['payer_email']);
+   $user_id = MWX__email_exists ($_inputs['payer_email']);
    if (!$user_id)
       {
       MWX__log_event (__FILE__, __LINE__, "WARNING: Cannot process subscription cancellation for non-existing buyer email: {$_inputs['payer_email']}. Exiting...");
       return; // Cannot do anything
       }
 
-   $products_purchased = maybe_unserialize(get_usermeta ($user_id, 'mwx_purchases'));
+   $products_purchased = MWX__GetListOfProductsForUser ($user_id);
 
    if (!is_array($products_purchased))
       {
@@ -622,6 +698,43 @@ function MWX__Subscription_Cancelled ()
       }
 
    $admin_email = MWX__Get_Admin_Email ();
+
+   if ($mwx_settings['keep_cancelled_subs_active_till_eot'])
+      {
+      MWX__log_event (__FILE__, __LINE__, "Keeping access to premium content until the end of term for user: '{$_inputs['payer_email']}'. Will wait for 'subscr_eot' message");
+
+      foreach ($products_purchased as $idx=>$product)
+         {
+         // Mark product by unique subscription id as "active-ending"
+         if ($_inputs['subscr_id'] == $product['subscr_id'])
+            {
+            // In a future we may need to delete cancelled subscription...
+            // unset ($products_purchased[$idx]);  // Remove element from array.
+            // $products_purchased = array_values ($products_purchased);   // Reindex array.
+
+            $products_purchased[$idx]['product_status'] = 'active-ending';
+            update_user_meta ($user_id, 'mwx_purchases', serialize ($products_purchased));
+
+            MWX__log_event (__FILE__, __LINE__, "User: '{$_inputs['payer_email']}' cancelled subscription for '{$_inputs['item_name']}'. Adjusted his product status to 'active-ending'.");
+
+            // Notify administrator about cancellation...
+            MWX__send_email (
+               $admin_email,
+               $admin_email,
+               "Subscription cancelled by {$_inputs['payer_email']}",
+               "Subscription cancelled by user: '{$_inputs['payer_email']}' ({$_inputs['first_name']} {$_inputs['last_name']}). Item: {$_inputs['item_name']}. Reason: {$_inputs['txn_type']}. Keeping access active until the end of term."
+               );
+
+            return;
+            }
+         }
+
+      MWX__log_event (__FILE__, __LINE__, "WARNING: Could not find a proper product for this user");
+      return;
+      }
+
+
+   // Subscription cancelled and access is terminated immediately regardless if there are any leftovers over the current term.
 
    foreach ($products_purchased as $idx=>$product)
       {
@@ -633,13 +746,12 @@ function MWX__Subscription_Cancelled ()
          // $products_purchased = array_values ($products_purchased);   // Reindex array.
 
          $products_purchased[$idx]['product_status'] = 'cancelled';
-         update_usermeta ($user_id, 'mwx_purchases', serialize ($products_purchased));
+         update_user_meta ($user_id, 'mwx_purchases', serialize ($products_purchased));
 
          MWX__log_event (__FILE__, __LINE__, "User: '{$_inputs['payer_email']}' cancelled subscription for '{$_inputs['item_name']}'. Adjusted his product status to 'cancelled'.");
          // If user does not own any products (serial refunder) see if we need to delete him.
          if (!count($products_purchased))
             {
-            $mwx_settings = MWX__get_settings ();
             if ($mwx_settings['delete_emptyhanded_user'])
                {
                MWX__log_event (__FILE__, __LINE__, "Removing emptyhanded user: '{$_inputs['payer_email']}'.");
@@ -680,14 +792,14 @@ function MWX__Payment_Cancelled ()
       return; // Cannot do anything without knowing which transaction was cancelled
       }
 
-   $user_id = email_exists ($_inputs['payer_email']);
+   $user_id = MWX__email_exists ($_inputs['payer_email']);
    if (!$user_id)
       {
       MWX__log_event (__FILE__, __LINE__, "WARNING: Cannot process refund for non-existing buyer email: {$_inputs['payer_email']}. Exiting...");
       return; // Cannot do anything
       }
 
-   $products_purchased = maybe_unserialize(get_usermeta ($user_id, 'mwx_purchases'));
+   $products_purchased = MWX__GetListOfProductsForUser ($user_id);
 
    if (!is_array($products_purchased))
       {
@@ -737,7 +849,7 @@ function MWX__Payment_Cancelled ()
                         {
                         // Affiliate was paid but has not refunded his commission. We have to adjust his 'payout_adjustment' value to compensate for owed commission.
                         $aff_info['mwx_aff_info']['referrals'][$refidx]['status'] = 'adjusted';
-                        $aff_info['mwx_aff_info']['payout_adjustment'] -= $referral['payout_amt'];
+                        $aff_info['mwx_aff_info']['payout_adjustment'] = (float)@$aff_info['mwx_aff_info']['payout_adjustment'] - (float)$referral['payout_amt'];
                         $aff_info['mwx_aff_info']['referrals'][$refidx]['payout_amt'] = '0.00';
                         MWX__log_event (__FILE__, __LINE__, "NOTE: Adjusting referral status for /already paid/ affiliate {$aff_info['aff_email']}. txn_id '{$referral['txn_id']}' status set to 'adjusted'. Referral was originally made for user '{$_inputs['payer_email']}' who was refunded for '{$_inputs['item_name']}'.");
                         }
@@ -751,7 +863,7 @@ function MWX__Payment_Cancelled ()
                      }
 
                   // Update this affiliate's data
-                  update_usermeta ($aff_info['aff_id'], 'mwx_aff_info', serialize ($aff_info['mwx_aff_info']));
+                  update_user_meta ($aff_info['aff_id'], 'mwx_aff_info', serialize ($aff_info['mwx_aff_info']));
                   break;
                   }
                }
@@ -766,7 +878,7 @@ function MWX__Payment_Cancelled ()
             unset ($products_purchased[$idx]['txn_ids'][$idx2]);
             $products_purchased[$idx]['txn_ids'] = array_values ($products_purchased[$idx]['txn_ids']);  // Reindex array.
 
-            // 'active'(customer is in good standing), 'cancelled'(subscription), 'ended'(subscription ended normally), 'refunded'(one of payments was refunded), 'deactivated'(manually set by admin)
+            // 'active'(customer is in good standing), 'cancelled'(subscription), 'ended'(subscription ended normally), 'expired'(forced expiry date reached), 'refunded'(one of payments was refunded), 'deactivated'(manually set by admin)
             $products_purchased[$idx]['product_status'] = 'refunded';   // Mark subscription as inactive but keep it in in case user will resume payments for it.
             MWX__log_event (__FILE__, __LINE__, "Alert: Payment cancellation/refund request: Marking subscription to '{$_inputs['item_name']}' as inactive for: {$_inputs['payer_email']}");
             }
@@ -781,7 +893,7 @@ function MWX__Payment_Cancelled ()
             MWX__log_event (__FILE__, __LINE__, "Alert: Payment cancellation/refund request: Removing product '{$_inputs['item_name']}' from: {$_inputs['payer_email']}");
             }
 
-         update_usermeta ($user_id, 'mwx_purchases', serialize ($products_purchased));
+         update_user_meta ($user_id, 'mwx_purchases', serialize ($products_purchased));
 
          // If user does not own any products (serial refunder) see if we need to delete him.
          if (!count($products_purchased))
@@ -817,20 +929,20 @@ function MWX__Subscription_Ended ()
    if (!isset($_inputs['subscr_id']) || !$_inputs['subscr_id'])
       return; // Cannot do anything without valid 'subscr_id'
 
-   $user_id = email_exists ($_inputs['payer_email']);
+   $user_id = MWX__email_exists ($_inputs['payer_email']);
    if (!$user_id)
       return; // Cannot do anything
 
    $mwx_settings = MWX__get_settings ();
    if ($mwx_settings['keep_access_for_ended_subscriptions'])
       {
-      MWX__log_event (__FILE__, __LINE__, "Subscription for '{$_inputs['item_name']}' ended normally for: {$_inputs['payer_email']}. Keeping his access active.");
+      MWX__log_event (__FILE__, __LINE__, "NOTE: Subscription for '{$_inputs['item_name']}' ended normally for: {$_inputs['payer_email']}. Keeping his access active.");
       return;  // Requested to keep access for subscriptions that are ended normally.
       }
 
    // Requested to terminate access for ended subscriptions.
 
-   $products_purchased = maybe_unserialize(get_usermeta ($user_id, 'mwx_purchases'));
+   $products_purchased = MWX__GetListOfProductsForUser ($user_id);
 
    if (!is_array($products_purchased))
       return;  // Cannot do anything
@@ -841,11 +953,18 @@ function MWX__Subscription_Ended ()
       // in_array/array_search ($needle, $haystack);
       if ($_inputs['subscr_id'] == $product['subscr_id'])
          {
-         // 'active'(customer is in good standing), 'cancelled'(subscription), 'ended'(subscription ended normally), 'refunded'(one of payments was refunded), 'deactivated'(manually set by admin)
+         if (@$product['expiry_date'])
+            {
+            // Custom expiry date is set. Ignore end-of-term event. Status will change to "expired" autmatically as soon as custom expiry will be reached
+            MWX__log_event (__FILE__, __LINE__, "NOTE: Custom expiry date is set for this product, ignoring end of term event: {$product['product_name']} : {$product['expiry_date']}.");
+            return;
+            }
+
+         // 'active'(customer is in good standing), 'cancelled'(subscription), 'ended'(subscription ended normally), 'expired'(forced expiry date reached), 'refunded'(one of payments was refunded), 'deactivated'(manually set by admin)
          if (!$mwx_settings['keep_access_for_ended_subscriptions'])
             $products_purchased[$idx]['product_status'] = 'ended';   // Mark subscription as inactive but keep it in in case user will resume payments for it.
 
-         update_usermeta ($user_id, 'mwx_purchases', serialize ($products_purchased));
+         update_user_meta ($user_id, 'mwx_purchases', serialize ($products_purchased));
          MWX__log_event (__FILE__, __LINE__, "Subscription for '{$_inputs['item_name']}' ended normally for: {$_inputs['payer_email']}. Disabling access.");
          return;
          }
@@ -861,7 +980,7 @@ function MWX__Subscription_Ended ()
 
 function MWX__Duplicate_Product_Transaction ($user_id, $subscr_id, $txn_id)
 {
-   $products_purchased = maybe_unserialize(get_usermeta ($user_id, 'mwx_purchases'));
+   $products_purchased = MWX__GetListOfProductsForUser ($user_id);
    if (!is_array($products_purchased))
       return FALSE;  // No transactions on record for this user.
 
@@ -899,7 +1018,7 @@ function MWX__notify_idevaffiliate ($idev_directory_url, $sale_amount, $order_nu
 //===========================================================================
 
 //===========================================================================
-function MWX__AddUserToAutoresponder ($user_id, $mwx_settings)
+function MWX__AddUserToAutoresponder ($user_id, $mwx_settings, $item_name = 'default')
 {
    global $_inputs;
 
@@ -911,76 +1030,259 @@ function MWX__AddUserToAutoresponder ($user_id, $mwx_settings)
       $_inputs['payer_email']       = $user_data->user_email;
       $_inputs['desired_username']  = $user_data->user_login;
       $_inputs['desired_password']  =  "(EXISTING PASSWORD)";
-      $_inputs['first_name']        =  "";
-      $_inputs['last_name']         =  "";
+      $_inputs['first_name']        = isset($user_data->first_name)?($user_data->first_name):"";
+      $_inputs['last_name']         = isset($user_data->last_name)?($user_data->last_name):"";
       }
 
    if (!$_inputs['payer_email'])
       return;  // Nothing to do without user's email
 
-   $user_added_to_autoresponder = maybe_unserialize(get_usermeta ($user_id, 'mwx_user_autoresponded'));
+   // prepare service details
+   $mailchimp_api_key = $mwx_settings ['mailchimp_api_key'];
+   $mailchimp_interest_groups = $mwx_settings ['mailchimp_interest_groups'];
+   $oneshoppingcart_merchant_id_number = $mwx_settings ['1shoppingcart_merchant_id_number'];
 
-   if (!$user_added_to_autoresponder)
+   // go through each autoresponder and subscribe to lists, else subscribe to default list
+   $user_subscribed = false;
+   $default_assignment = null;
+   foreach ((array)@$mwx_settings['autoresponder_assignments'] as $autoresponder_assignment)
       {
-      // Add user to Aweber list if enabled
-      if ($mwx_settings ['aweber_integration_enabled'] && $mwx_settings ['aweber_list_email'])
-         {
-         // Send special email to add new user to Aweber mailing list.
-         MWX__send_email (
-            $mwx_settings ['aweber_list_email'],  // To
-            'memberwingaweber@memberwing.com',  // From
-            'Subscribe',
-            "New Subscriber (via Wordpress Membership site plugin MemberWing):" .
-            "<br />\nSubscriber_First_Name: {$_inputs['first_name']}" .
-            "<br />\nSubscriber_Last_Name:  {$_inputs['last_name']}" .
-            "<br />\nSubscriber_Email:      {$_inputs['payer_email']}" .
-            "<br />\n"
-            );
-
-         $user_added_to_autoresponder = TRUE;
-         }
-
-      // Add user to MailChimp list if enabled
-      if ($mwx_settings ['mailchimp_integration_enabled'] && $mwx_settings ['mailchimp_api_key'] && $mwx_settings ['mailchimp_mail_list_id_number'])
-         {
-         include_once (dirname(__FILE__) . '/MCAPI.class.php');
-         // grab an API Key from http://admin.mailchimp.com/account/api/
-         $api = new MCAPI($mwx_settings ['mailchimp_api_key']);
-
-         // grab your List's Unique Id by going to http://admin.mailchimp.com/lists/
-         // Click the "settings" link for the list - the Unique Id is at the bottom of that page.
-         $list_id = $mwx_settings ['mailchimp_mail_list_id_number'];
-
-         // Merge variables are the names of all of the fields your mailing list accepts
-         // Ex: first name is by default FNAME
-         // You can define the names of each merge variable in Lists > click the desired list > list settings > Merge tags for personalization
-         // Pass merge values to the API in an array as follows
-         $mergeVars = array (
-                        'FNAME'     => $_inputs['first_name'],
-                        'LNAME'     => $_inputs['last_name'],
-                        'USERNAME'  => $_inputs['desired_username'],
-                        'PASSWORD'  => $_inputs['desired_password'],
-                        'INTERESTS' => $mwx_settings ['mailchimp_interest_groups']
-                        );
-
-         if ($api->listSubscribe($list_id, $_inputs['payer_email'], $mergeVars) === true)
-            MWX__log_event (__FILE__, __LINE__, "Note: MailChimp subscription for user: {$_inputs['payer_email']} successfully created");
+     // store default credentials
+     if ($autoresponder_assignment['level'] == 'default') $default_assignment = $autoresponder_assignment;
+      // check for level/assignment match
+     if (stristr ($item_name, $autoresponder_assignment['level']) != false)
+        {
+         // check if already subscribed
+         $user_added_to_autoresponder = get_user_meta ($user_id, 'mwx_user_autoresponded_'.$autoresponder_assignment['key'], true);
+       if (!$user_added_to_autoresponder)
+       {
+          // figure out which service and verify settings
+         if ($autoresponder_assignment['service'] == 'Aweber')
+            $user_subscribed = MWX_SubscribeToAweber ($autoresponder_assignment);
+         else if ($autoresponder_assignment['service'] == 'MailChimp' && $mailchimp_api_key != '')
+            $user_subscribed = MWX_SubscribeToMailChimp ($autoresponder_assignment, $mailchimp_api_key, $mailchimp_interest_groups);
+         else if ($autoresponder_assignment['service'] == '1ShoppingCart' && $oneshoppingcart_merchant_id_number != '')
+            $user_subscribed = MWX_SubscribeTo1ShoppingCart ($autoresponder_assignment, $oneshoppingcart_merchant_id_number);
+       }
          else
-            MWX__log_event (__FILE__, __LINE__, "Warning: MailChimp subscription for user: {$_inputs['payer_email']} failed: api->errorMessage = {$api->errorMessage}");
-
-         $user_added_to_autoresponder = TRUE;
-         }
-
-      if ($user_added_to_autoresponder)
          {
-         update_usermeta ($user_id, 'mwx_user_autoresponded', '1');
+         MWX__log_event (__FILE__, __LINE__, "NOTE: Not adding user: {$_inputs['payer_email']} to autoresponder {$autoresponder_assignment['key']}. Already been added.");
          }
+        if ($user_subscribed) update_user_meta ($user_id, 'mwx_user_autoresponded_'.$autoresponder_assignment['key'], '1');
+        }
       }
-   else
+
+   // subscribe to default list if no subscription was made above and a default list exists
+   if (!$user_subscribed && $default_assignment != null)
       {
-      MWX__log_event (__FILE__, __LINE__, "NOTE: Not adding user: {$_inputs['payer_email']} to autoresponders. Already been added.");
+      // check if already subscribed
+      $user_added_to_autoresponder = get_user_meta ($user_id, 'mwx_user_autoresponded_'.$default_assignment['key'], true);
+     if (!$user_added_to_autoresponder)
+         {
+         // figure out which service and verify settings
+         if ($default_assignment['service'] == 'Aweber')
+            $user_subscribed = MWX_SubscribeToAweber ($default_assignment);
+         else if ($default_assignment['service'] == 'MailChimp' && $mailchimp_api_key != '')
+            $user_subscribed = MWX_SubscribeToMailChimp ($default_assignment, $mailchimp_api_key, $mailchimp_interest_groups);
+         else if ($default_assignment['service'] == '1ShoppingCart' && $oneshoppingcart_merchant_id_number != '')
+            $user_subscribed = MWX_SubscribeTo1ShoppingCart ($default_assignment, $oneshoppingcart_merchant_id_number);
+        }
+      else
+         {
+         MWX__log_event (__FILE__, __LINE__, "NOTE: Not adding user: {$_inputs['payer_email']} to autoresponder {$default_assignment['key']}. Already been added.");
+         }
+     if ($user_subscribed) update_user_meta ($user_id, 'mwx_user_autoresponded_'.$default_assignment['key'], '1');
       }
+
+
 }
 //===========================================================================
+
+//===========================================================================
+function MWX_SubscribeToAweber ($autoresponder_assignment)
+{
+   global $_inputs;
+
+   // Send special email to add new user to Aweber mailing list.
+   MWX__send_email (
+   $autoresponder_assignment['list'],  // To
+   'memberwingaweber@memberwing.com',  // From
+   'Subscribe',
+   "New Subscriber (via Wordpress Membership site plugin MemberWing):" .
+   "<br />\nSubscriber_First_Name: {$_inputs['first_name']}" .
+   "<br />\nSubscriber_Last_Name:  {$_inputs['last_name']}" .
+   "<br />\nSubscriber_Email:      {$_inputs['payer_email']}" .
+   "<br />\n"
+   );
+
+   MWX__log_event (__FILE__, __LINE__, "Note: Aweber subscription initiated for user: {$_inputs['payer_email']}.");
+   return true;
+}
+//===========================================================================
+
+//===========================================================================
+function MWX_SubscribeToMailChimp ($autoresponder_assignment, $mailchimp_api_key, $mailchimp_interest_groups)
+{
+   global $_inputs;
+
+   if (!class_exists('MCAPI'))
+      {
+      include_once (dirname(__FILE__) . '/MCAPI.class.php');
+      }
+
+   // grab an API Key from http://admin.mailchimp.com/account/api/
+   $api = new MCAPI($mailchimp_api_key);
+
+   // grab your List's Unique Id by going to http://admin.mailchimp.com/lists/
+   // Click the "settings" link for the list - the Unique Id is at the bottom of that page.
+   $mwx_settings = MWX__get_settings ();
+   $list_id = $mwx_settings ['mailchimp_mail_list_id_number'];
+
+   // Merge variables are the names of all of the fields your mailing list accepts
+   // Ex: first name is by default FNAME
+   // You can define the names of each merge variable in Lists > click the desired list > list settings > Merge tags for personalization
+   // Pass merge values to the API in an array as follows
+   $mergeVars = array (
+         'FNAME'     => $_inputs['first_name'],
+         'LNAME'     => $_inputs['last_name'],
+         'USERNAME'  => $_inputs['desired_username'],
+         'PASSWORD'  => $_inputs['desired_password'],
+         'INTERESTS' => $mailchimp_interest_groups
+         );
+
+   if (@$_inputs['MMERGE3'])
+   $mergeVars['MMERGE3'] = $_inputs['MMERGE3'];
+   if (@$_inputs['MMERGE4'])
+   $mergeVars['MMERGE4'] = $_inputs['MMERGE4'];
+
+   if ($api->listSubscribe($autoresponder_assignment['list'], $_inputs['payer_email'], $mergeVars) === true)
+      MWX__log_event (__FILE__, __LINE__, "Note: MailChimp subscription for user: {$_inputs['payer_email']} successfully created");
+   else
+      MWX__log_event (__FILE__, __LINE__, "Warning: MailChimp subscription for user: {$_inputs['payer_email']} failed: api->errorMessage = {$api->errorMessage}");
+   return true;
+}
+//===========================================================================
+
+//===========================================================================
+function MWX_SubscribeTo1ShoppingCart ($autoresponder_assignment, $merchant_id) {
+   global $_inputs;
+
+   $ch = curl_init();
+   curl_setopt($ch, CURLOPT_URL, "https://www.mcssl.com/app/contactsave.asp");
+   curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+   curl_setopt($ch, CURLOPT_POST, true);
+   curl_setopt($ch, CURLOPT_HEADER, 1);
+   curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
+
+   $data = array(
+   'merchantid' => $merchant_id,
+   'ARThankyouURL' => 'www.autowebbusiness.com/app/thankyou.asp?ID='.$merchant_id,
+   'copyarresponse' => '1',
+   'custom' => '0',
+   'defaultar' => $autoresponder_assignment['list'],
+   'allowmulti' => '0',
+   'visiblefields' => 'Name,Email1',
+   'requiredfields' => 'Email1',
+   'Name' => $_inputs['first_name'].' '.$_inputs['last_name'],
+   'Email1' => $_inputs['payer_email']
+   );
+   //url-ify the data for the POST
+   $fields_string = '';
+   foreach($data as $key=>$value) { $fields_string .= $key.'='.$value.'&'; }
+   rtrim($fields_string,'&');
+
+   curl_setopt($ch, CURLOPT_POSTFIELDS, $fields_string);
+   $output = curl_exec($ch);
+   curl_close($ch);
+   MWX__log_event (__FILE__, __LINE__, "Note: 1ShoppingCart subscription for user: {$_inputs['payer_email']} successfully sent");
+   return true;
+}
+//===========================================================================
+
+//===========================================================================
+// Returns expiry date in format ("2008-04-11 12:43:56 EST") if custom expiry date should be set for this product.
+// "" if no custom expiry date required for this product.
+function MWX__GetProductExpiryDate ($product_name, $purchase_date)
+{
+   $mwx_settings = MWX__get_settings ();
+
+   if (!$purchase_date)
+      $purchase_date = "now";
+
+   $prods = explode ("\n", trim($mwx_settings['products_lifetimes']));
+
+   foreach ($prods as $prod)
+      {
+      $p = explode (':', trim($prod));
+      if (count($p) == 2)
+         {
+         if (stristr ($product_name, $p[0]))
+            {
+            $expires_in_seconds = MWX__ConvertProdTimeToSeconds($p[1]);
+
+            // Matching keyword in custom expiry conditions found
+            $expiry_date = date ('Y-m-d H:i:s T', strtotime ("$purchase_date + $expires_in_seconds seconds"));
+            return $expiry_date;
+            }
+         }
+      }
+
+   return "";
+}
+//===========================================================================
+
+//===========================================================================
+// Assemble normalized array of product keywords and their delays in seconds: array ('keyword1' => 1234, 'keyword2' => 5678, ...)
+function MWX__GetProductsAccessDelays ($mwx_settings=FALSE)
+{
+   if (!$mwx_settings)
+      $mwx_settings = MWX__get_settings ();
+
+   $prods = explode ("\n", trim($mwx_settings['products_access_delays']));
+
+   $products_access_delays = array();
+   foreach ($prods as $prod)
+      {
+      $p = explode (':', trim($prod));
+      if (count($p) == 2)
+         {
+         $products_access_delays [$p[0]] = MWX__ConvertProdTimeToSeconds($p[1]);
+         }
+      }
+
+   return $products_access_delays;
+}
+//===========================================================================
+
+//===========================================================================
+// $text_delay: FALSE, 20m, 24h, 30d
+// 0 will yield 0, NULL or false will yield FALSE (value is not specified).
+function MWX__ConvertProdTimeToSeconds ($text_delay)
+{
+   if ($text_delay === 0 || $text_delay === "0")
+      return 0;
+
+   if (!$text_delay)
+      return FALSE;  // No specified
+
+   if (is_numeric($text_delay))
+      return $text_delay*24*60*60;  // 25 - means 25 days
+
+   $strlen_minus_1 = strlen($text_delay) - 1;
+   $delay_in = $text_delay [$strlen_minus_1];
+   $numeric_delay = substr ($text_delay, 0, $strlen_minus_1);
+   switch ($delay_in)
+      {
+      case 's': $multiplier = 1;          break;   // This is not publicly announced feature.
+      case 'm': $multiplier = 60;         break;
+      case 'h': $multiplier = 60*60;      break;
+      case 'd':
+      default:  $multiplier = 24*60*60;   break;
+      }
+
+   return $numeric_delay * $multiplier;
+}
+//===========================================================================
+
 
 ?>

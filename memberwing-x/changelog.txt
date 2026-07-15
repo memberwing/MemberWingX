@@ -1,0 +1,457 @@
+                        ===================
+                           MemberWing-X
+                        ===================
+
+
+Change Log:
+===========
+
+8.700
+-   Restored compatibility with modern WordPress (tested on WP 7.0.1) and PHP 8.3:
+    - Fixed fatal PHP4-style widget constructor (widget_MWX__list_pages) that crashed every page.
+    - Fixed fatal string-offset access on missing user meta (User Profile admin page).
+    - Fixed fatal count()/array_values() on missing user meta (IP protection, affiliate data).
+    - Fixed MCAPI (MailChimp) PHP4-style constructor that silently never ran.
+    - Replaced removed/deprecated WordPress APIs: WP_User_Search -> WP_User_Query,
+      get_usermeta -> get_user_meta, get_currentuserinfo -> wp_get_current_user,
+      get_userdatabylogin -> get_user_by, get_settings -> get_option, wpdb::escape -> esc_sql.
+    - Password check now uses wp_check_password (works with WP 6.8+ bcrypt hashes).
+    - Removed includes of wp-includes/registration.php and class-phpass.php (no longer needed).
+    - PayPal IPN postback host updated to ipnpb.paypal.com / ipnpb.sandbox.paypal.com
+      (PayPal retired IPN validation on www.paypal.com).
+    - MWX__get_settings() now merges defaults (eliminates hundreds of PHP 8 warnings).
+    - Fixed comment-hiding filter typo ($content1) that wiped comment text for guests.
+    - Fixed digital-object DELETE query that referenced an undefined variable.
+    - Many PHP 8 strictness fixes: numeric casts on money math, guarded superglobals,
+      session_destroy guards, https for jQuery CDN.
+-   NEW: Offline license validation. License keys are Ed25519-signed (format
+    MWX1.<payload>.<signature>) and verified locally against an embedded public key.
+    No license server needed. Keys encode domain (exact, *.wildcard, or * any),
+    expiry date (or never) and edition (GA/TSI). Keys are generated with the
+    private license-generator tool (not distributed with the plugin).
+
+8.572
+-   mwx.php updated to possibly fix "ip protection causes timeout"
+
+8.571
+-   "Call-time pass-by-reference has been removed" fix in mwx.php
+
+8.570
+-   Reversioned
+
+6.570
+-   IP Protection added.
+
+6.566
+-   Eliminated auto-deletion of log files upon reaching certain length.
+
+6.565
+-   Fixed Paypal protocol change in sending back confirmations.
+
+6.564
+-   Added ability to load custom extension into MWX__init () (in mwx.php).
+
+-------------------------------------------------------------------------------------------------------
+6.563
+-   Added support for Paypal's HTTP 1.1
+
+6.562
+-   Added support for http://www.Pay4Me.com - Nigerian payment gateway system
+
+6.561
+-   Fix for gilmo/servers.
+
+6.560
+-   Added new product status: "active-ending" - in case user cancelled recurring subscription before the end of term, leaving active access until the end of term.
+
+6.559
+-   Added configurable ability to keep until the end of term/immediately terminate access to premium content upon cancellation of subscriptions.
+
+6.558
+-   Minor fixes to mwx-notify-plugnpay.php (email update propagation, more details in logging)
+
+6.557
+-   Added enhancement to Plugnplay integration to allow for change email/password from PnP system to propagate to Wordpress
+
+6.556
+-   Update to mwx-admin.php to handle (autofix) possibly corrupted 'mwx_purchases' metadata.
+
+6.555
+-   Minor update to mwx-admin.php email messages. Added integration with PlugnPay.com payment processing system.
+
+6.554
+-   Fixed bug in mwx-admin.php where user metadata could contain corrupted record. This caused inability to read or update user's products.
+
+6.553
+-   Fixed 2Checkout notification script - removed leftover debugging information
+
+6.552
+-   Fixed issue with Gravity Forms processing for single purchase products. Fixed potential of double account creation (improved cache logic).
+
+6.551
+-   Fixed bug with e-junkie sales processing. Now parsing for product name is correct.
+
+6.550
+-   Added Integration with Gravity Forms: http://toprate.org/gf
+    See tutorial here:
+    http://forum.memberwing.com/threads/537-How-to-build-advanced-multi-option-subscription-form-with-invitation-codes
+
+6.540
+-   Added Integration with 2Checkout.
+-   Fixed issue with sending duplicate welcome emails.
+
+6.533
+-   Improved function for duplicate user registration avoidance.
+
+6.532
+-   Implemented solution for duplicate user registration: in-memory cache check fix for email_exists() and wp_create_user()
+-   authorize.net logic update from Daniel Watrous.
+
+6.531
+-   TSI fix where '*:7d' marker won't work in this condition: {{{?:14d|*:7d}}}
+
+6.530
+-   Clickbank fix
+
+6.529
+-   Added extra logging
+-   Added remedy to prevent duplicate account registrations.
+
+6.528
+-   Fixes in administration screens
+
+6.527
+-   Fixed bug with NMI payments logic.
+-   Fixed bug in admin table representing affiliate payout %%%%
+
+6.526
+-   Added ability to retrieve members data via API call (see mwx-api.php)
+-   Added ability to process clickbank's TEST_SALE event
+
+6.525
+-   Updated to accomodate older PHP 5.0.x systems not supporting curl_setopt_array(). License messaging (upgrades) message is clarified.
+-   Minor change to mwx-dos-builder.css (added z-index:100; to #image_tooltip)
+
+6.524
+-   PHP shortcodes fix (<?= replaced on <?php echo in mwx-admin.php, mwx-dos-admin.php) to ensure compatibility with more systems.
+-   Added new fields into metadata: 'mwx_purchases' to keep more detailed record of each purchase.
+
+6.523
+-   Added ability to sort digital files by name and date via Digital Online Store javascript widget,
+    available via MemberWing-X->Digital Online Store Builder. New parameter added:
+   'sort'=>'name', Where:
+   -    'name' ('name-asc') = normal sort by name,
+   -    'name-desc' - reverse sort by name,
+   -    'fndate' ('fndate-asc')- older to newer (date encoded in filename in format: MyDoc_2011-01-14.pdf),
+   -    'date-desc' - newer to older (date encoded in filename)
+
+6.522
+-   Yet another fix for DCP/custom post types/404 errors with WP 3.x (flush_rules() moved into mwx.php / MWX__activated ())
+
+6.521
+-   Fixed custom post types 404 errors with WP 3.x
+-   Change log separated from mwx.php into separate changelog.txt file (here).
+
+6.520
+-  Added ability to process invitation codes and assign any product for specially invited registrants.
+   Invitation codes allows to grant people access (temporary or permanent) to any membership product.
+   Includes abilities to:
+   -  create unlimited number of Invitation Codes
+   -  limit number of times each code is used
+   -  set expiration date for invitation code
+   -  track how many times each invitation code is used
+   -  Automatically assign certain product to new member who joined using invitation code
+   -  Automatically set expiration date for products (good for trial offers and list building)
+   -  Assign referrer ID - static affiliate ID - referrer - who will be credited for every sale by the member who used that Invitation Code.
+   Requires Register Plus Redux - free plugin to manage front end register form and invitation codes options:
+   http://wordpress.org/extend/plugins/register-plus-redux/
+
+6.515
+-  Added start_date constant: 'tomorrow' in fs-daterange specification. Works in a similar manner to 'today' but adds 1 day.
+
+6.514
+-  is_multisite() fix.
+
+6.513
+-  Setting of new member first and last name upon new subscription in mwx-notify-utils.php
+   All occurenced of deprecated update_usermeta() replaced with update_user_meta().
+
+6.512
+-  Minor correction to fs-daterange specification, allowing to skip '=' character from end of range spec.
+
+6.511
+-  Added full support for e-junkie.com payment processor
+
+6.510
+-  Added ability to sell downloadable files by range of dates.
+   Date could be specified either within the name of file in format: "My_report_YYYY-MM-DD.pdf" or pulled from file creation date.
+   Now it is possible to, examples:
+   - Sell files released today
+   - Sell access to file to be released within 1 week from now
+   - Sell access to files released between fixed dates
+   - Sell access to files released in the past, such as within last week, last month, last year, etc..
+   - Sell "License" that will include 1 year worth of downloadable upgrades.
+   Range of dated could be specified in very flexible manner with 1 day precision.
+   See description of 'fs-daterange' filespec in MWX manual.
+- Adjusted mwx-notify-clickbank.php, added $_inputs['U_txn_date']
+- Adjusted mwx-notify-utils.php, added 'txn_type' == 'ejgift' (e-junkie gift)
+
+6.507
+-  Wordpress MultiSite enhancements added.
+
+6.506
+- Fixed bad admin style for type="checkbox" made by some wordpress themes (some themes forcefully introduce admin UI style="float:left;")
+
+6.505
+-  Added "..." right before premium marker warning output.
+
+6.504
+-  Admin panel improved.
+
+6.503
+-  Fixed "no products owned" logic handling
+
+6.502
+-  Fixed {{{*}}} logic handling
+
+6.501
+-  MemberWing-X TSI (Time Sensitive Information) Edition is launched
+   Added support for time-sensitive information delivery capabilities.
+   MemberWing-X TSI Edition caters to time critical information publishers, such as research analysts, strategists, investment and securities industry advisors, investment and trading experts and others.
+   MemberWing-X TSI helps professionals to offer and manage access to time sensitive information, time-delayed information, real-time news, urgent advisories,
+   critical opportunity alerts and warnings directly through their websites.
+   MemberWing-X TSI edition adds new dimension for monetization of premium information based not only on information quality but also on the ability to access this information in
+   timely manner that could be predefined and fully automated.
+   TSI edition concepts can be utilized not only by financial market advisors - this could be very powerful marketing tool utilizied by any membership site webmaster.
+   Studies shows that ability to be able to access valuable information immediately without delays could act as a strong stimulus to gain new subscribers for any membership site.
+   Following original MemberWing traditions for top notch SEO features, MemberWing-X TSI Edition adds extra SEO layer to time-sensitive membership sites: an ability for
+   automated ranking and indexing of once time-sensitive pages by major search engines after expiration of delay timeframe.
+   MemberWing-X TSI Edition allows to set and sell different levels of memberships with variable delays to access published time-critical and time-sensitive data.
+
+-  Added category-wide premium markers.
+   Instead of manually adding marker to every article - MWX 6.1+ will allow to specify teaser length + marker code for the whole category.
+   This makes it excellent feature to migrate to MWX from other membership systems or quickly convert old websites with lots of posts to membership sites.
+   And now it will not require any changes in content.
+
+6.030
+- Added integration with ClickBank
+
+6.027
+- Added integration with RAP (Rapid Action Profits) system and Universal Paypal Include File setting in MWX->Integration with Other Systems.
+  See this:
+  http://www.memberwing.com/goto/rapidactionprofits/
+
+6.026
+- Updated Paypal IPN logic to process recurring_payment_expired and recurring_payment_profile_created notifications.
+
+6.025
+- Updated Aweber shortcode functionality to allow name fields to be optional.
+
+6.024
+- Corrected Aweber shortcode functionality: [mwx_auto_register_aweber prodkeyword=productkeyword]
+
+6.023
+- Added Aweber shortcode functionality: [mwx_auto_register_aweber level=membershipkeyword requireterms=true|false]
+
+6.022
+- Fix adding first/last name to autoresponder from free signup form. (mwx-notify-utils.php)
+
+6.021
+- Fixed error for cases where lousy hosting companies have curl library disabled. mwx-utils.php
+  Fixed "out of memory" error with str_replace in mwx-dos-admin.php (~603)
+  Use this hosting company that is perfect and properly priced for everything: http://toprate.org/hosting
+
+6.020
+- Fixed 404 in headers for IPN's, etc. Added forced header ("HTTP/1.1 200 OK"); to mwx-include-all.php
+  NOTE: This is important update!
+
+6.018
+- CURLOPT_FOLLOWLOCATION removed (mwx-utils.php / curl) to accomodate lousy hosting companies
+
+6.017
+- Mailchimp library conflict (if already loaded) fixed.
+
+6.016
+- Email list segmentation made backward compatible
+
+6.015
+- Added email list segmentation - possiblity to have multiple autoresponders (Thanks to D.Watrous)
+
+6.014
+- Fixed automated adding of new affiliate data if that data was missing for member.
+
+6.013
+- Fixed Gradual Content Delivery
+- Added 't2' template
+
+6.012
+6.011
+6.010
+6.009
+- Improved Digital Online Store Builder User Interface
+
+6.008
+- Added  "Locked" access directory names to digital content protection.
+- Added ability to support authorize.net and choose authorize.net as a primary payment processor with the help of Authorize.net plugin (http://toprate.org/auth-net)
+
+6.007
+- Fixed Embedded store widget to support embedding into blogger.com
+
+6.006
+- Digital Online Store widget improved
+
+6.005
+- Added javascript widget to digital online store allowing infinite customizable replication of your digital online store on any number of websites worldwide.
+
+6.003
+- Changes custom buy code DB fields from varchar to text.
+
+6.002
+- Added possibility to specify array of unrestricted directory names inside PREMIUM_FILES
+
+6.001
+- Fixed bug with HTML code processing/regex that broke some themes layouts.
+- Digital Online Store Builder new improvements, admin menu additions
+- Digital Online Store Builder CSS cleanups
+
+6.000
+- Launch of Digital Online Store Builder
+
+5.501
+- Minor cleanups
+
+5.500
+- Digital Online Store Builder announced.
+- Digital Content Protection: "Private Subdirectory Names"   renamed to "Individual Access Subdirectory Names"
+- Digital Content Protection: "Keyworded Subdirectory Names" renamed to "Group Access Subdirectory Names"
+
+5.434
+- Added ,aff_name=username to ECWID affiliate tracking/reporting....
+
+5.433
+- Added ability to include extra features/extras file
+
+5.432
+- Added affiliate tracking integration with excellent ECWID shopping cart service: http://www.ecwid.com
+  Note: this integration allows to sent affiliate ID to Sales->Orders information of ECWID shopping cart.
+  More info: http://toprate.org/ecwidaff
+
+5.431
+- Fixed bug in MWX__GetProductExpiryDate() to eliminate extra "\n" from product name:NNN field
+
+5.430
+- Added ability to set custom expiry date for single purchase products and for subscriptions.
+  Useful to:
+  - fine tune length of access beyond "end of term" for recurring products
+  - limit access for single purchase products.
+
+5.424
+- NMI payments extension script switched to processing of POST instead of GET
+
+5.423
+- Corrected affiliate network fee calculation logic.
+
+5.422
+- Corrected "blank screen" for unavailable premum digital files. (mwx-dcp.php moved ZenCr markers)
+
+5.421
+- Added margin:0; to images in autogenerated paypal buttons.
+
+5.420
+- For DCP added:
+   -  ability "admin acts like regular visitor"
+   - Reserved Directory names to match to product names  option
+   - Private directory names for individual purchase files option
+
+5.411
+- Added option to show/hide premium content warnings for Home page.
+- Added option to show/hide premium content warnings for category pages/excerpts.
+  These settings helps to accomodate themes that tends to screw layouts when showing excerpts for premium posts
+- Authorize.net instructions and admin panel updated.
+
+5.410
+- Added Google First Click Free functionality as per Google specs: http://googlewebmastercentral.blogspot.com/2008/10/first-click-free-for-web-search.html
+- Fixed bad $count in preg_replace in MWX__BuildTrailingTags() here.
+- Added ability for theme coders to figure out if user has access to article via code:
+      if (function_exists ('MWX__UserCanAccessArticle')
+         {
+         // first parameter: article/page ID. -1 => current article, second parameter: user_id. -1 => currently logged on user. Third parameter: premium marker string (stuff inside {{{...}}} brackets)
+         $access_info = MWX__UserCanAccessArticle (-1, -1, "gold:5d|platinum");
+         if ($access_info)
+            {
+            if ($access_info['immediate_access'])
+               {
+               echo 'current visitor can access article protected with {{{gold:5d|platinum}}} premium marker immediately';
+               }
+            else
+               {
+               // Note: this will only work for MemberWing-X TSI Edition. Other editions will always return '0'.
+               echo 'current visitor can access article protected with {{{gold:5d|platinum}}} premium marker in ' . $access_info['in_seconds'] . ' seconds';
+               }
+            }
+         else
+            {
+            echo 'currentl visitor does not have access to article protected with {{{gold:5d|platinum}}} premium marker';
+            }
+         }
+
+5.402
+- Digital Content Protection with TraceFusion added
+- Changed priority of MWX__init() call to get ahead of buddypress in setting cookie. Masked @setcookie() call with '@' as well.
+- Added integration with Wordpress e-Store plugin:
+  http://toprate.org/wp-e-store
+  This integration allows to combine online store + membership site within one portal.
+  Buying products from online store powered by e-Store plugin will give person access to membership content protected by MemberWing-X
+
+5.322
+- Added new user account password validation logic: mwx-notify-utils.php (~line 208) to send user his password instead of "EXISTING-PASSWORD".
+
+5.321
+- Added Authorize.net support with the help of this plugin:
+  http://toprate.org/auth-net
+- Added fix to not show premium content warning messag for category and home page view. Premium message is cut in this case.
+- Fixed presence of "'" in item name to confuse DB.
+
+5.320
+- Added Universal Integration with Paypal shopping carts and payment systems.
+  Any paypal shopping cart now could re-POST payment event to MemberWing script and have buyer to be able to access premium content.
+  Added new marker: {{{$}}} - user could own any active product, subscription, article or page to see this article.
+
+5.318
+- InfusionSoft integration: Fixed duplicate transaction/unprocessed sales for users who already have some products.
+
+5.317
+- Cleaned up admin panel for Integration with NMI Payments
+- Added option to add 2 extra fields for Mailchimp integration (see mwx-notify-paypal.php for "MMERGE")
+
+5.316
+- Fixed bug with admin panel/general settings display with MSIE
+- Added MWX affiliate network integration with NMI payments
+
+5.315
+- Fix hiding comments for non-logged on users for Disqus commenting system
+- Fixed minor glitch with handling emails that contained '+' sign
+- Added integration with NMI Payments system
+
+5.314
+- Out of beta!
+- Added ability for users to set their memberwing affiliate link in admin panel and have "powered by... " link pointing to their affiliate link.
+- Fixed glitch in API interface
+
+5.313
+- Fixed tiers number for processing. Do not process more tiers than specified in settings (notify-utils)
+
+5.312
+- Added API call to build affiliate link, fixed "use get" flag for API calls.
+
+5.311
+- MWX api key is added for integration with other systems (added in admin panel).
+- mwx-api.php added exporting ability to create affiliates from third-party applications.
+- Added support for multiple dynamic tiers (up to 5) for MWX affiliate network. Affiliate network is almost ready to go viral (stay tuned - it is going to be huge)!
+
+5.301
+- MW affiliate network fee is gone for premium license owners.
+- License validation protocol improved. All pre 5.301 users need to upgrade.
+
+5.2xx
+- Early beta.

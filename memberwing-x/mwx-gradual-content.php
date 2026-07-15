@@ -15,7 +15,7 @@ function MWX__where ($where)
 {
    global $wp_query, $wpdb;
 
-   if (current_user_can ('edit_users'))
+   if (MWX__is_user_admin())
       return $where;
 
    $user_maturity = MWX__get_current_user_maturity ();
@@ -32,10 +32,14 @@ function MWX__join  ($join)
 {
    global $wpdb;
 
-   if (current_user_can ('edit_users'))
+   if (MWX__is_user_admin())
       return $join;
 
-   return $join .= " LEFT JOIN $wpdb->postmeta ON $wpdb->posts.ID = $wpdb->postmeta.post_id AND $wpdb->postmeta.meta_key = 'maturity'";
+   // Daniel's fix 2010-09-11
+   if (strpos($join,'postmeta') === false)
+      return $join .= " LEFT JOIN $wpdb->postmeta ON $wpdb->posts.ID = $wpdb->postmeta.post_id AND $wpdb->postmeta.meta_key = 'maturity'";
+   else
+      return $join;
 }
 //===========================================================================
 
@@ -45,7 +49,7 @@ function MWX__join  ($join)
 
 function MWX__full_request ($query)
 {
-   if (current_user_can ('edit_users'))
+   if (MWX__is_user_admin())
       return $query;
 
    if (strpos($query, 'DISTINCT') === FALSE)
@@ -66,15 +70,12 @@ function MWX__full_request ($query)
 
 function MWX__wp_list_categories ($param)
 {
-   if (current_user_can ('edit_users'))
+   if (MWX__is_user_admin())
       return $param;
 
    return preg_replace ('|(\</a\>)(\s*\(\d+\))|i', "$1", $param);
 }
 //===========================================================================
-
-
-
 
 //===========================================================================
 //
@@ -110,7 +111,7 @@ function &MWX__get_pages($args = '') {
    $offset = (int) $offset;
 
    if ($status == 'all' || $status == 'All' || $status == 'ALL') $statusquery = '';
-   else $statusquery = $wpdb->prepare(" AND post_status = '". $status ."'");
+   else $statusquery = $wpdb->prepare(" AND post_status = %s", $status);
 
 
    $cache = array();
@@ -169,7 +170,7 @@ function &MWX__get_pages($args = '') {
          foreach ( $post_authors as $post_author ) {
             //Do we have an author id or an author login?
             if ( 0 == intval($post_author) ) {
-               $post_author = get_userdatabylogin($post_author);
+               $post_author = get_user_by('login', $post_author);
                if ( empty($post_author) )
                   continue;
                if ( empty($post_author->ID) )
@@ -331,9 +332,9 @@ function MWX__load_widgets() {
 //
 class widget_MWX__list_pages extends WP_Widget {
 
-   function widget_MWX__list_pages() {
+   function __construct() {
       $widget_ops = array('classname' => 'mwgc_widget_pages', 'description' => __( 'MemberWing Gradual Content widget to list Pages based on maturity') );
-      $this->WP_Widget('memberwing_pages', __('MemberWing-X Pages'), $widget_ops);
+      parent::__construct('memberwing_pages', __('MemberWing-X Pages'), $widget_ops);
    }
 
    function widget( $args, $instance ) {
@@ -409,13 +410,13 @@ function MWX__get_current_user_maturity ()
 {
    global $current_user;
 
-   get_currentuserinfo();
+   wp_get_current_user();
 
    if (!$current_user)
       return (0);
 
    // Format: 2009-01-15 18:45:29
-   if (!$current_user->user_registered)
+   if (!isset($current_user->user_registered) || !$current_user->user_registered)
       return (0);
 
    $user_join_datetime = $current_user->user_registered . " UTC";

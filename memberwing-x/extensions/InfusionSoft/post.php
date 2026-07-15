@@ -86,6 +86,13 @@ else
    $_inputs['is_sandbox'] = FALSE;
 //------------------------------------------
 
+//------------------------------------------
+// Guard against duplicate transaction/unprocessed sales for users who already have some products
+$datemark = date ('Y-m-d H:i:s T', strtotime ("now"));
+$_inputs['txn_id']            .= " " . $datemark;
+$_inputs['subscr_id']         .= " " . $datemark;
+//------------------------------------------
+
 MWX__log_event (__FILE__, __LINE__, "$_extension_name: Raw Entry Hit.\n  === POST data: ===\n    " . serialize($_POST) . "\n  === GET data: ===\n    " . serialize($_GET) . "\n  === Calculated _inputs: ===\n    " . serialize($_inputs));
 
 if (!$_inputs['payer_email'])

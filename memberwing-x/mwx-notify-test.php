@@ -9,7 +9,7 @@
 // 2. Edit '$testing_what' array values - set ONLY ONE of desired values to '1', others to '0'.
 // 3. Comment out this line before testing:
 
-exit ('<html><hr /><h1 align="center"><a href="http://www.memberwing.com/">MemberWing-X - Wordpress Membership Plugin</a></h1><hr /></html>');
+exit ('<html><hr /><h1 align="center"><a href="http://www.memberwing.com/">MemberWing-X - Wordpress Membership Plugin</a></h1><h2>Please uncomment exit() line from mwx-notify-test.php file</h2><hr /></html>');
 
 // 4. Access this file via browser like this (adjust it for your setup):
 //    http://www.YOUR-WEBSITE-NAME.com/wp-content/plugins/MEMBERWING-X-DIRECTORY/notify_test.php
@@ -19,8 +19,7 @@ exit ('<html><hr /><h1 align="center"><a href="http://www.memberwing.com/">Membe
 // 8. Uncomment 'exit()' line back at step 3
 
 
-require_once (dirname(__FILE__) . '/mwx-utils.php');
-require_once (dirname(__FILE__) . '/mwx-notify-utils.php');
+include (dirname(__FILE__) . '/mwx-include-all.php');
 
 // Set only one of them to 1, the rest to 0.
 $testing_what = array (
@@ -39,21 +38,22 @@ $testing_what = array (
    $_inputs = array ();
    $_inputs['first_name']       = 'John';                   // Buyer
    $_inputs['last_name']        = 'Smith';                  // Buyer
-   $_inputs['payer_email']      = 'payer1@mail.com';        // Buyer  (test buyer - your other email)
-   $_inputs['receiver_email']   = 'receiver1@mail.com';     // Seller (you, webmaster, website owner)
+   $_inputs['payer_email']      = 'testbuyer@email.com';         // Buyer  (test buyer - your other email)
+   $_inputs['receiver_email']   = 'testseller@email.com';     // Seller (you, webmaster, website owner)
    $_inputs['desired_username'] = 'johntest';               // Buyer's username (optional)
    $_inputs['desired_password'] = 'pass123';                // Buyer's password (optional)
    $_inputs['U_txn_date']       = date ('Y-m-d H:i:s', strtotime ("now")); // Normalize it for database usage.
    $_inputs['txn_id']           = "";
 
+   $membership_name = 'Super Gold Membership';
    if ($testing_what['new_recurring_subscription_signup'])
       {
       $_inputs['txn_type']         = 'subscr_signup';
 
-      $_inputs['item_name']        = 'Super Gold Membership';
+      $_inputs['item_name']        = $membership_name;
       $_inputs['mc_amount3_gross'] = "12.99";                  // Amount paid
       $_inputs['customer_ip']      = "123.45.6.78";            // Buyer's IP address
-      $_inputs['subscr_id']        = 'SUBSCR-045';             // Unique subscription ID issued by shopping cart (Paypal)
+      $_inputs['subscr_id']        = 'SUBSCR-046';             // Unique subscription ID issued by shopping cart (Paypal)
 
       MWX__Product_Purchased ();  // Single item or subscription purchased. Enter product in user's metadata.
       }
@@ -61,7 +61,7 @@ $testing_what = array (
       {
       $_inputs['txn_type']         = 'subscr_payment';
 
-      $_inputs['item_name']        = 'Super Gold Membership';
+      $_inputs['item_name']        = $membership_name;
       $_inputs['mc_amount3_gross'] = "12.99";                  // Amount paid
       $_inputs['customer_ip']      = "123.45.6.78";            // Buyer's IP address
       $_inputs['txn_id']           = 'TXN-001';                // Unique transaction ID issued by payment processor (Paypal)
@@ -74,7 +74,7 @@ $testing_what = array (
       $_inputs['txn_type']         = "";
       $_inputs['payment_status']   = 'refunded';
 
-      $_inputs['item_name']        = 'Super Gold Membership';
+      $_inputs['item_name']        = $membership_name;
       $_inputs['mc_amount3_gross'] = "12.99";                  // Amount paid
       $_inputs['customer_ip']      = "123.45.6.78";            // Buyer's IP address
       $_inputs['txn_id']           = 'TXN-002';                // Unique transaction ID issued by payment processor (Paypal)
@@ -87,7 +87,7 @@ $testing_what = array (
       {
       $_inputs['txn_type']         = "subscr_cancel";
 
-      $_inputs['item_name']        = 'Super Gold Membership';
+      $_inputs['item_name']        = $membership_name;
       $_inputs['customer_ip']      = "123.45.6.78";            // Buyer's IP address
       $_inputs['subscr_id']        = 'SUBSCR-045';             // Unique subscriber's ID issued by shopping cart (Paypal)
 
@@ -97,7 +97,7 @@ $testing_what = array (
       {
       $_inputs['txn_type']         = "subscr_eot";
 
-      $_inputs['item_name']        = 'Super Gold Membership';
+      $_inputs['item_name']        = $membership_name;
       $_inputs['customer_ip']      = "123.45.6.78";            // Buyer's IP address
       $_inputs['subscr_id']        = 'SUBSCR-045';             // Unique subscriber's ID issued by shopping cart (Paypal)
 

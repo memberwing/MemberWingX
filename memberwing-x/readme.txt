@@ -1,10 +1,18 @@
                         ===================
-                        MemberWing-X Manual
-                            Text version
+                           MemberWing-X
                         ===================
 
-coming soon...
 
-Latest PDF manual is located here:
+Latest PDF manuals and step-by-step tutorial for MemberWing-X are located here:
 
-http://www.memberwing.com/LATEST/mwx/get.php?what=manual&format=pdf
+New, updated PDF manual:
+------------------------
+http://www.memberwing.com/mwxm
+
+Tutorials:
+----------
+http://toprate.org/mwxtuts
+
+Change Log:
+-----------
+changelog.txt

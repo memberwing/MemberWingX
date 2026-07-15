@@ -1,0 +1,151 @@
+table#mwx-dos-products-1 {
+   border:0;
+   border-collapse:collapse;
+   font-family:"Lucida Sans Unicode","Lucida Grande",Sans-Serif;
+   font-size:10px;
+   text-align:left;
+   /* width:600px; */
+   }
+#mwx-dos-products-1 thead tr th div {
+   color:#EAEAEA;
+   font-size:120%;
+   font-weight:normal;
+   }
+#mwx-dos-products-1 thead th.rounded-top-left {
+   background:url("topleft.png") no-repeat scroll left -1px #5d5852;
+   }
+#mwx-dos-products-1 thead th.rounded-top-right {
+   background:url("topright.png") no-repeat scroll right -1px #5d5852;
+   }
+#mwx-dos-products-1 th {
+   background:none repeat scroll 0 0 #5d5852;
+   border-bottom:1px solid #FFFFFF;
+   color:#003399;
+   font-size:13px;
+   font-weight:normal;
+   padding:8px;
+   }
+#mwx-dos-products-1 tr td {
+   background:url("gradback.png") repeat-x scroll 0 0 #f0f1ee;
+   border-bottom:1px solid #FFFFFF;
+   border-top:1px solid #FFFFFF;
+   line-height:16px;
+   padding:2px;
+   color:#111;
+   }
+
+#mwx-dos-products-1 tbody tr:hover td {
+   background:url("gradhover.png") repeat-x scroll 0 0 #f0e4d4;
+   color:#c20505;
+   }
+
+#mwx-dos-products-1 tbody tr td p {
+   margin:0;
+   padding:0;
+   font-size:11px;
+   line-height:13px;
+   }
+
+#mwx-dos-products-1 tbody tr td .dir-info-wrapper {
+   color:#FFF;
+   background-color:#666;
+   }
+
+#mwx-dos-products-1 tbody tr td .product-wrapper {
+   margin:0 5px;
+   }
+
+#mwx-dos-products-1 tbody tr td .product-images {
+   float:left;
+   padding-right:3px;
+   margin-right:8px;
+   }
+
+#mwx-dos-products-1 tbody tr td .product-images img {
+   height:25px;margin-right:1px;
+   }
+
+#mwx-dos-products-1 tbody tr td .product-name {
+   float:left;
+   font-weight:bold;
+   font-size:12px;
+   }
+
+#mwx-dos-products-1 tbody tr td .buy-download-buttons {
+   float:right;
+   padding-top:3px;
+   }
+
+#mwx-dos-products-1 tbody tr td .buy-download-buttons .price-tag-wrapper {
+   display:inline;
+   font-weight:bold;
+   color:green;
+   padding:1px;
+   float:left;
+   }
+#mwx-dos-products-1 tbody tr td .buy-download-buttons .buy-button-wrapper {
+   display:inline;
+   float:left;
+   margin-left:8px;
+   }
+
+#mwx-dos-products-1 tbody tr td .buy-download-buttons .download-link-wrapper {
+   display:inline;
+   }
+
+#mwx-dos-products-1 tbody tr td .buy-download-buttons .download-link-wrapper a{
+   text-decoration:none;
+   }
+
+#mwx-dos-products-1 tbody tr td .product-description {
+   clear:both;
+   text-align:center;
+   }
+
+#mwx-dos-products-1 tfoot tr td {
+   background:none repeat scroll 0 0 #5d5852;
+   padding:0;
+   font-size:95%;
+   color:#E1E1E1;
+   }
+
+#mwx-dos-products-1 tfoot tr td div a {
+   text-decoration:none;
+   color:#E1E1E1;
+   }
+
+#mwx-dos-products-1 tfoot td.rounded-bottom-left {
+   background:url("botleft.png") no-repeat scroll left bottom #5d5852;
+   }
+#mwx-dos-products-1 tfoot td.rounded-bottom-right {
+   background:url("botright.png") no-repeat scroll right bottom #5d5852;
+   }
+
+#rounded-corner {
+   background:url("lamp.jpg") no-repeat scroll 45px 33px transparent;
+   border-collapse:collapse;
+   font-family:"Lucida Sans Unicode","Lucida Grande",Sans-Serif;
+   font-size:12px;
+   text-align:left;
+   width:480px;
+   }
+
+#text_tooltip {
+   position:absolute;
+   border:2px solid #333;
+   background:#FFC;
+   padding:2px 5px;
+   color:#333;
+   width:300px;
+   display:none;
+   }
+
+#image_tooltip {
+   position:absolute;
+   border:2px solid #333;
+   background:#FFC;
+   padding:2px 5px;
+   color:#333;
+   display:none;
+   z-index:100;
+   }
